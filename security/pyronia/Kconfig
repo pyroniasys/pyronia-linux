@@ -1,0 +1,56 @@
+config SECURITY_PYRONIA
+	bool "Pyronia support"
+	depends on SECURITY && NET
+	select AUDIT
+	select SECURITY_PATH
+	select SECURITYFS
+	select SECURITY_NETWORK
+	default n
+	help
+	  This enables the Pyronia security module.
+	  Required userspace tools (if they are not included in your
+	  distribution) and further information may be found at
+	  http://apparmor.wiki.kernel.org
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_PYRONIA_BOOTPARAM_VALUE
+	int "Pyronia boot parameter default value"
+	depends on SECURITY_PYRONIA
+	range 0 1
+	default 1
+	help
+	  This option sets the default value for the kernel parameter
+	  'apparmor', which allows Pyronia to be enabled or disabled
+          at boot.  If this option is set to 0 (zero), the Pyronia
+	  kernel parameter will default to 0, disabling Pyronia at
+	  boot.  If this option is set to 1 (one), the Pyronia
+	  kernel parameter will default to 1, enabling Pyronia at
+	  boot.
+
+	  If you are unsure how to answer this question, answer 1.
+
+config SECURITY_PYRONIA_HASH
+	bool "Enable introspection of sha1 hashes for loaded profiles"
+	depends on SECURITY_PYRONIA
+	select CRYPTO
+	select CRYPTO_SHA1
+	default y
+
+	help
+	  This option selects whether introspection of loaded policy
+	  is available to userspace via the apparmor filesystem.
+
+config SECURITY_PYRONIA_HASH_DEFAULT
+       bool "Enable policy hash introspection by default"
+       depends on SECURITY_PYRONIA_HASH
+       default y
+
+       help
+         This option selects whether sha1 hashing of loaded policy
+	 is enabled by default. The generation of sha1 hashes for
+	 loaded policy provide system administrators a quick way
+	 to verify that policy in the kernel matches what is expected,
+	 however it can slow down policy load on some devices. In
+	 these cases policy hashing can be disabled by default and
+	 enabled only if needed.

@@ -162,6 +162,7 @@ source security/selinux/Kconfig
 source security/smack/Kconfig
 source security/tomoyo/Kconfig
 source security/apparmor/Kconfig
+source security/pyronia/Kconfig
 source security/loadpin/Kconfig
 source security/yama/Kconfig
 
@@ -191,6 +192,9 @@ choice
 	config DEFAULT_SECURITY_APPARMOR
 		bool "AppArmor" if SECURITY_APPARMOR=y
 
+        config DEFAULT_SECURITY_PYRONIA
+                bool "Pyronia" if SECURITY_PYRONIA=y
+
 	config DEFAULT_SECURITY_DAC
 		bool "Unix Discretionary Access Controls"
 
@@ -202,6 +206,7 @@ config DEFAULT_SECURITY
 	default "smack" if DEFAULT_SECURITY_SMACK
 	default "tomoyo" if DEFAULT_SECURITY_TOMOYO
 	default "apparmor" if DEFAULT_SECURITY_APPARMOR
+        default "pyronia" if DEFAULT_SECURITY_PYRONIA
 	default "" if DEFAULT_SECURITY_DAC
 
 endmenu
