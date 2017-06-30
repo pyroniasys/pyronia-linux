@@ -21,7 +21,7 @@
 #include <linux/ctype.h>
 #include <linux/errno.h>
 
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 #include "include/audit.h"
 #include "include/context.h"
 #include "include/crypto.h"
@@ -32,34 +32,34 @@
 /*
  * The AppArmor interface treats data as a type byte followed by the
  * actual data.  The interface has the notion of a a named entry
- * which has a name (AA_NAME typecode followed by name string) followed by
+ * which has a name (PYR_NAME typecode followed by name string) followed by
  * the entries typecode and data.  Named types allow for optional
  * elements and extensions to be added and tested for without breaking
  * backwards compatibility.
  */
 
-enum aa_code {
-	AA_U8,
-	AA_U16,
-	AA_U32,
-	AA_U64,
-	AA_NAME,		/* same as string except it is items name */
-	AA_STRING,
-	AA_BLOB,
-	AA_STRUCT,
-	AA_STRUCTEND,
-	AA_LIST,
-	AA_LISTEND,
-	AA_ARRAY,
-	AA_ARRAYEND,
+enum pyr_code {
+	PYR_U8,
+	PYR_U16,
+	PYR_U32,
+	PYR_U64,
+	PYR_NAME,		/* same as string except it is items name */
+	PYR_STRING,
+	PYR_BLOB,
+	PYR_STRUCT,
+	PYR_STRUCTEND,
+	PYR_LIST,
+	PYR_LISTEND,
+	PYR_ARRAY,
+	PYR_ARRAYEND,
 };
 
 /*
- * aa_ext is the read of the buffer containing the serialized profile.  The
+ * pyr_ext is the read of the buffer containing the serialized profile.  The
  * data is copied into a kernel buffer in apparmorfs and then handed off to
  * the unpack routines.
  */
-struct aa_ext {
+struct pyr_ext {
 	void *start;
 	void *end;
 	void *pos;		/* pointer to current position in the buffer */
@@ -70,13 +70,13 @@ struct aa_ext {
 static void audit_cb(struct audit_buffer *ab, void *va)
 {
 	struct common_audit_data *sa = va;
-	if (sa->aad->iface.target) {
-		struct aa_profile *name = sa->aad->iface.target;
+	if (sa->pyrd->iface.target) {
+		struct pyr_profile *name = sa->pyrd->iface.target;
 		audit_log_format(ab, " name=");
 		audit_log_untrustedstring(ab, name->base.hname);
 	}
-	if (sa->aad->iface.pos)
-		audit_log_format(ab, " offset=%ld", sa->aad->iface.pos);
+	if (sa->pyrd->iface.pos)
+		audit_log_format(ab, " offset=%ld", sa->pyrd->iface.pos);
 }
 
 /**
@@ -89,39 +89,39 @@ static void audit_cb(struct audit_buffer *ab, void *va)
  *
  * Returns: %0 or error
  */
-static int audit_iface(struct aa_profile *new, const char *name,
-		       const char *info, struct aa_ext *e, int error)
+static int audit_iface(struct pyr_profile *new, const char *name,
+		       const char *info, struct pyr_ext *e, int error)
 {
-	struct aa_profile *profile = __aa_current_profile();
+	struct pyr_profile *profile = __pyr_current_profile();
 	struct common_audit_data sa;
-	struct apparmor_audit_data aad = {0,};
+	struct pyronia_audit_data pyrd = {0,};
 	sa.type = LSM_AUDIT_DATA_NONE;
-	sa.aad = &aad;
+	sa.pyrd = &pyrd;
 	if (e)
-		aad.iface.pos = e->pos - e->start;
-	aad.iface.target = new;
-	aad.name = name;
-	aad.info = info;
-	aad.error = error;
+		pyrd.iface.pos = e->pos - e->start;
+	pyrd.iface.target = new;
+	pyrd.name = name;
+	pyrd.info = info;
+	pyrd.error = error;
 
-	return aa_audit(AUDIT_APPARMOR_STATUS, profile, GFP_KERNEL, &sa,
+	return pyr_audit(AUDIT_PYRONIA_STATUS, profile, GFP_KERNEL, &sa,
 			audit_cb);
 }
 
 /* test if read will be in packed data bounds */
-static bool inbounds(struct aa_ext *e, size_t size)
+static bool inbounds(struct pyr_ext *e, size_t size)
 {
 	return (size <= e->end - e->pos);
 }
 
 /**
- * aa_u16_chunck - test and do bounds checking for a u16 size based chunk
+ * pyr_u16_chunck - test and do bounds checking for a u16 size based chunk
  * @e: serialized data read head (NOT NULL)
  * @chunk: start address for chunk of data (NOT NULL)
  *
  * Returns: the size of chunk found with the read head at the end of the chunk.
  */
-static size_t unpack_u16_chunk(struct aa_ext *e, char **chunk)
+static size_t unpack_u16_chunk(struct pyr_ext *e, char **chunk)
 {
 	size_t size = 0;
 
@@ -137,7 +137,7 @@ static size_t unpack_u16_chunk(struct aa_ext *e, char **chunk)
 }
 
 /* unpack control byte */
-static bool unpack_X(struct aa_ext *e, enum aa_code code)
+static bool unpack_X(struct pyr_ext *e, enum pyr_code code)
 {
 	if (!inbounds(e, 1))
 		return 0;
@@ -163,7 +163,7 @@ static bool unpack_X(struct aa_ext *e, enum aa_code code)
  *
  * Returns: 0 if either match fails, the read head does not move
  */
-static bool unpack_nameX(struct aa_ext *e, enum aa_code code, const char *name)
+static bool unpack_nameX(struct pyr_ext *e, enum pyr_code code, const char *name)
 {
 	/*
 	 * May need to reset pos if name or type doesn't match
@@ -171,9 +171,9 @@ static bool unpack_nameX(struct aa_ext *e, enum aa_code code, const char *name)
 	void *pos = e->pos;
 	/*
 	 * Check for presence of a tagname, and if present name size
-	 * AA_NAME tag value is a u16.
+	 * PYR_NAME tag value is a u16.
 	 */
-	if (unpack_X(e, AA_NAME)) {
+	if (unpack_X(e, PYR_NAME)) {
 		char *tag = NULL;
 		size_t size = unpack_u16_chunk(e, &tag);
 		/* if a name is specified it must match. otherwise skip tag */
@@ -193,9 +193,9 @@ fail:
 	return 0;
 }
 
-static bool unpack_u16(struct aa_ext *e, u16 *data, const char *name)
+static bool unpack_u16(struct pyr_ext *e, u16 *data, const char *name)
 {
-	if (unpack_nameX(e, AA_U16, name)) {
+	if (unpack_nameX(e, PYR_U16, name)) {
 		if (!inbounds(e, sizeof(u16)))
 			return 0;
 		if (data)
@@ -206,9 +206,9 @@ static bool unpack_u16(struct aa_ext *e, u16 *data, const char *name)
 	return 0;
 }
 
-static bool unpack_u32(struct aa_ext *e, u32 *data, const char *name)
+static bool unpack_u32(struct pyr_ext *e, u32 *data, const char *name)
 {
-	if (unpack_nameX(e, AA_U32, name)) {
+	if (unpack_nameX(e, PYR_U32, name)) {
 		if (!inbounds(e, sizeof(u32)))
 			return 0;
 		if (data)
@@ -219,9 +219,9 @@ static bool unpack_u32(struct aa_ext *e, u32 *data, const char *name)
 	return 0;
 }
 
-static bool unpack_u64(struct aa_ext *e, u64 *data, const char *name)
+static bool unpack_u64(struct pyr_ext *e, u64 *data, const char *name)
 {
-	if (unpack_nameX(e, AA_U64, name)) {
+	if (unpack_nameX(e, PYR_U64, name)) {
 		if (!inbounds(e, sizeof(u64)))
 			return 0;
 		if (data)
@@ -232,9 +232,9 @@ static bool unpack_u64(struct aa_ext *e, u64 *data, const char *name)
 	return 0;
 }
 
-static size_t unpack_array(struct aa_ext *e, const char *name)
+static size_t unpack_array(struct pyr_ext *e, const char *name)
 {
-	if (unpack_nameX(e, AA_ARRAY, name)) {
+	if (unpack_nameX(e, PYR_ARRAY, name)) {
 		int size;
 		if (!inbounds(e, sizeof(u16)))
 			return 0;
@@ -245,9 +245,9 @@ static size_t unpack_array(struct aa_ext *e, const char *name)
 	return 0;
 }
 
-static size_t unpack_blob(struct aa_ext *e, char **blob, const char *name)
+static size_t unpack_blob(struct pyr_ext *e, char **blob, const char *name)
 {
-	if (unpack_nameX(e, AA_BLOB, name)) {
+	if (unpack_nameX(e, PYR_BLOB, name)) {
 		u32 size;
 		if (!inbounds(e, sizeof(u32)))
 			return 0;
@@ -262,13 +262,13 @@ static size_t unpack_blob(struct aa_ext *e, char **blob, const char *name)
 	return 0;
 }
 
-static int unpack_str(struct aa_ext *e, const char **string, const char *name)
+static int unpack_str(struct pyr_ext *e, const char **string, const char *name)
 {
 	char *src_str;
 	size_t size = 0;
 	void *pos = e->pos;
 	*string = NULL;
-	if (unpack_nameX(e, AA_STRING, name)) {
+	if (unpack_nameX(e, PYR_STRING, name)) {
 		size = unpack_u16_chunk(e, &src_str);
 		if (size) {
 			/* strings are null terminated, length is size - 1 */
@@ -284,7 +284,7 @@ fail:
 	return 0;
 }
 
-static int unpack_strdup(struct aa_ext *e, char **string, const char *name)
+static int unpack_strdup(struct pyr_ext *e, char **string, const char *name)
 {
 	const char *tmp;
 	void *pos = e->pos;
@@ -313,7 +313,7 @@ static int unpack_strdup(struct aa_ext *e, char **string, const char *name)
  *
  * Returns: 1 if valid accept tables else 0 if error
  */
-static bool verify_accept(struct aa_dfa *dfa, int flags)
+static bool verify_accept(struct pyr_dfa *dfa, int flags)
 {
 	int i;
 
@@ -336,13 +336,13 @@ static bool verify_accept(struct aa_dfa *dfa, int flags)
  *
  * returns dfa or ERR_PTR or NULL if no dfa
  */
-static struct aa_dfa *unpack_dfa(struct aa_ext *e)
+static struct pyr_dfa *unpack_dfa(struct pyr_ext *e)
 {
 	char *blob = NULL;
 	size_t size;
-	struct aa_dfa *dfa = NULL;
+	struct pyr_dfa *dfa = NULL;
 
-	size = unpack_blob(e, &blob, "aadfa");
+	size = unpack_blob(e, &blob, "pyrdfa");
 	if (size) {
 		/*
 		 * The dfa is aligned with in the blob to 8 bytes
@@ -356,10 +356,10 @@ static struct aa_dfa *unpack_dfa(struct aa_ext *e)
 			TO_ACCEPT2_FLAG(YYTD_DATA32);
 
 
-		if (aa_g_paranoid_load)
+		if (pyr_g_paranoid_load)
 			flags |= DFA_FLAG_VERIFY_STATES;
 
-		dfa = aa_dfa_unpack(blob + pad, size - pad, flags);
+		dfa = pyr_dfa_unpack(blob + pad, size - pad, flags);
 
 		if (IS_ERR(dfa))
 			return dfa;
@@ -371,7 +371,7 @@ static struct aa_dfa *unpack_dfa(struct aa_ext *e)
 	return dfa;
 
 fail:
-	aa_put_dfa(dfa);
+	pyr_put_dfa(dfa);
 	return ERR_PTR(-EPROTO);
 }
 
@@ -382,12 +382,12 @@ fail:
  *
  * Returns: 1 if table successfully unpacked
  */
-static bool unpack_trans_table(struct aa_ext *e, struct aa_profile *profile)
+static bool unpack_trans_table(struct pyr_ext *e, struct pyr_profile *profile)
 {
 	void *pos = e->pos;
 
 	/* exec table is optional */
-	if (unpack_nameX(e, AA_STRUCT, "xtable")) {
+	if (unpack_nameX(e, PYR_STRUCT, "xtable")) {
 		int i, size;
 
 		size = unpack_array(e, NULL);
@@ -432,25 +432,25 @@ static bool unpack_trans_table(struct aa_ext *e, struct aa_profile *profile)
 				/* fail - all other cases with embedded \0 */
 				goto fail;
 		}
-		if (!unpack_nameX(e, AA_ARRAYEND, NULL))
+		if (!unpack_nameX(e, PYR_ARRAYEND, NULL))
 			goto fail;
-		if (!unpack_nameX(e, AA_STRUCTEND, NULL))
+		if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 			goto fail;
 	}
 	return 1;
 
 fail:
-	aa_free_domain_entries(&profile->file.trans);
+	pyr_free_domain_entries(&profile->file.trans);
 	e->pos = pos;
 	return 0;
 }
 
-static bool unpack_rlimits(struct aa_ext *e, struct aa_profile *profile)
+static bool unpack_rlimits(struct pyr_ext *e, struct pyr_profile *profile)
 {
 	void *pos = e->pos;
 
 	/* rlimits are optional */
-	if (unpack_nameX(e, AA_STRUCT, "rlimits")) {
+	if (unpack_nameX(e, PYR_STRUCT, "rlimits")) {
 		int i, size;
 		u32 tmp = 0;
 		if (!unpack_u32(e, &tmp, NULL))
@@ -462,14 +462,14 @@ static bool unpack_rlimits(struct aa_ext *e, struct aa_profile *profile)
 			goto fail;
 		for (i = 0; i < size; i++) {
 			u64 tmp2 = 0;
-			int a = aa_map_resource(i);
+			int a = pyr_map_resource(i);
 			if (!unpack_u64(e, &tmp2, NULL))
 				goto fail;
 			profile->rlimits.limits[a].rlim_max = tmp2;
 		}
-		if (!unpack_nameX(e, AA_ARRAYEND, NULL))
+		if (!unpack_nameX(e, PYR_ARRAYEND, NULL))
 			goto fail;
-		if (!unpack_nameX(e, AA_STRUCTEND, NULL))
+		if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 			goto fail;
 	}
 	return 1;
@@ -485,9 +485,9 @@ fail:
  *
  * NOTE: unpack profile sets audit struct if there is a failure
  */
-static struct aa_profile *unpack_profile(struct aa_ext *e)
+static struct pyr_profile *unpack_profile(struct pyr_ext *e)
 {
-	struct aa_profile *profile = NULL;
+	struct pyr_profile *profile = NULL;
 	const char *name = NULL;
 	size_t size = 0;
 	int i, error = -EPROTO;
@@ -495,12 +495,12 @@ static struct aa_profile *unpack_profile(struct aa_ext *e)
 	u32 tmp;
 
 	/* check that we have the right struct being passed */
-	if (!unpack_nameX(e, AA_STRUCT, "profile"))
+	if (!unpack_nameX(e, PYR_STRUCT, "profile"))
 		goto fail;
 	if (!unpack_str(e, &name, NULL))
 		goto fail;
 
-	profile = aa_alloc_profile(name);
+	profile = pyr_alloc_profile(name);
 	if (!profile)
 		return ERR_PTR(-ENOMEM);
 
@@ -525,7 +525,7 @@ static struct aa_profile *unpack_profile(struct aa_ext *e)
 	}
 
 	/* per profile debug flags (complain, audit) */
-	if (!unpack_nameX(e, AA_STRUCT, "flags"))
+	if (!unpack_nameX(e, PYR_STRUCT, "flags"))
 		goto fail;
 	if (!unpack_u32(e, &tmp, NULL))
 		goto fail;
@@ -534,17 +534,17 @@ static struct aa_profile *unpack_profile(struct aa_ext *e)
 	if (!unpack_u32(e, &tmp, NULL))
 		goto fail;
 	if (tmp == PACKED_MODE_COMPLAIN)
-		profile->mode = APPARMOR_COMPLAIN;
+		profile->mode = PYRONIA_COMPLAIN;
 	else if (tmp == PACKED_MODE_KILL)
-		profile->mode = APPARMOR_KILL;
+		profile->mode = PYRONIA_KILL;
 	else if (tmp == PACKED_MODE_UNCONFINED)
-		profile->mode = APPARMOR_UNCONFINED;
+		profile->mode = PYRONIA_UNCONFINED;
 	if (!unpack_u32(e, &tmp, NULL))
 		goto fail;
 	if (tmp)
 		profile->audit = AUDIT_ALL;
 
-	if (!unpack_nameX(e, AA_STRUCTEND, NULL))
+	if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 		goto fail;
 
 	/* path_flags is optional */
@@ -563,7 +563,7 @@ static struct aa_profile *unpack_profile(struct aa_ext *e)
 	if (!unpack_u32(e, &tmpcap.cap[0], NULL))
 		goto fail;
 
-	if (unpack_nameX(e, AA_STRUCT, "caps64")) {
+	if (unpack_nameX(e, PYR_STRUCT, "caps64")) {
 		/* optional upper half of 64 bit caps */
 		if (!unpack_u32(e, &(profile->caps.allow.cap[1]), NULL))
 			goto fail;
@@ -573,17 +573,17 @@ static struct aa_profile *unpack_profile(struct aa_ext *e)
 			goto fail;
 		if (!unpack_u32(e, &(tmpcap.cap[1]), NULL))
 			goto fail;
-		if (!unpack_nameX(e, AA_STRUCTEND, NULL))
+		if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 			goto fail;
 	}
 
-	if (unpack_nameX(e, AA_STRUCT, "capsx")) {
+	if (unpack_nameX(e, PYR_STRUCT, "capsx")) {
 		/* optional extended caps mediation mask */
 		if (!unpack_u32(e, &(profile->caps.extended.cap[0]), NULL))
 			goto fail;
 		if (!unpack_u32(e, &(profile->caps.extended.cap[1]), NULL))
 			goto fail;
-		if (!unpack_nameX(e, AA_STRUCTEND, NULL))
+		if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 			goto fail;
 	}
 
@@ -612,7 +612,7 @@ static struct aa_profile *unpack_profile(struct aa_ext *e)
 			if (!unpack_u16(e, &profile->net.quiet[i], NULL))
 				goto fail;
 		}
-		if (!unpack_nameX(e, AA_ARRAYEND, NULL))
+		if (!unpack_nameX(e, PYR_ARRAYEND, NULL))
 			goto fail;
 	}
 	/*
@@ -622,7 +622,7 @@ static struct aa_profile *unpack_profile(struct aa_ext *e)
 	profile->net.allow[AF_UNIX] = 0xffff;
 	profile->net.allow[AF_NETLINK] = 0xffff;
 
-	if (unpack_nameX(e, AA_STRUCT, "policydb")) {
+	if (unpack_nameX(e, PYR_STRUCT, "policydb")) {
 		/* generic policy dfa - optional and may be NULL */
 		profile->policy.dfa = unpack_dfa(e);
 		if (IS_ERR(profile->policy.dfa)) {
@@ -637,13 +637,13 @@ static struct aa_profile *unpack_profile(struct aa_ext *e)
 			/* default start state */
 			profile->policy.start[0] = DFA_START;
 		/* setup class index */
-		for (i = AA_CLASS_FILE; i <= AA_CLASS_LAST; i++) {
+		for (i = PYR_CLASS_FILE; i <= PYR_CLASS_LAST; i++) {
 			profile->policy.start[i] =
-				aa_dfa_next(profile->policy.dfa,
+				pyr_dfa_next(profile->policy.dfa,
 					    profile->policy.start[0],
 					    i);
 		}
-		if (!unpack_nameX(e, AA_STRUCTEND, NULL))
+		if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 			goto fail;
 	}
 
@@ -662,7 +662,7 @@ static struct aa_profile *unpack_profile(struct aa_ext *e)
 	if (!unpack_trans_table(e, profile))
 		goto fail;
 
-	if (!unpack_nameX(e, AA_STRUCTEND, NULL))
+	if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 		goto fail;
 
 	return profile;
@@ -673,7 +673,7 @@ fail:
 	else if (!name)
 		name = "unknown";
 	audit_iface(profile, name, "failed to unpack profile", e, error);
-	aa_free_profile(profile);
+	pyr_free_profile(profile);
 
 	return ERR_PTR(error);
 }
@@ -686,7 +686,7 @@ fail:
  *
  * Returns: error or 0 if header is good
  */
-static int verify_header(struct aa_ext *e, int required, const char **ns)
+static int verify_header(struct pyr_ext *e, int required, const char **ns)
 {
 	int error = -EPROTONOSUPPORT;
 	const char *name = NULL;
@@ -723,15 +723,15 @@ static int verify_header(struct aa_ext *e, int required, const char **ns)
 static bool verify_xindex(int xindex, int table_size)
 {
 	int index, xtype;
-	xtype = xindex & AA_X_TYPE_MASK;
-	index = xindex & AA_X_INDEX_MASK;
-	if (xtype == AA_X_TABLE && index >= table_size)
+	xtype = xindex & PYR_X_TYPE_MASK;
+	index = xindex & PYR_X_INDEX_MASK;
+	if (xtype == PYR_X_TABLE && index >= table_size)
 		return 0;
 	return 1;
 }
 
 /* verify dfa xindexes are in range of transition tables */
-static bool verify_dfa_xindex(struct aa_dfa *dfa, int table_size)
+static bool verify_dfa_xindex(struct pyr_dfa *dfa, int table_size)
 {
 	int i;
 	for (i = 0; i < dfa->tables[YYTD_ID_ACCEPT]->td_lolen; i++) {
@@ -749,9 +749,9 @@ static bool verify_dfa_xindex(struct aa_dfa *dfa, int table_size)
  *
  * Returns: 0 if passes verification else error
  */
-static int verify_profile(struct aa_profile *profile)
+static int verify_profile(struct pyr_profile *profile)
 {
-	if (aa_g_paranoid_load) {
+	if (pyr_g_paranoid_load) {
 		if (profile->file.dfa &&
 		    !verify_dfa_xindex(profile->file.dfa,
 				       profile->file.trans.size)) {
@@ -764,29 +764,29 @@ static int verify_profile(struct aa_profile *profile)
 	return 0;
 }
 
-void aa_load_ent_free(struct aa_load_ent *ent)
+void pyr_load_ent_free(struct pyr_load_ent *ent)
 {
 	if (ent) {
-		aa_put_profile(ent->rename);
-		aa_put_profile(ent->old);
-		aa_put_profile(ent->new);
+		pyr_put_profile(ent->rename);
+		pyr_put_profile(ent->old);
+		pyr_put_profile(ent->new);
 		kzfree(ent);
 	}
 }
 
-struct aa_load_ent *aa_load_ent_alloc(void)
+struct pyr_load_ent *pyr_load_ent_alloc(void)
 {
-	struct aa_load_ent *ent = kzalloc(sizeof(*ent), GFP_KERNEL);
+	struct pyr_load_ent *ent = kzalloc(sizeof(*ent), GFP_KERNEL);
 	if (ent)
 		INIT_LIST_HEAD(&ent->list);
 	return ent;
 }
 
 /**
- * aa_unpack - unpack packed binary profile(s) data loaded from user space
+ * pyr_unpack - unpack packed binary profile(s) data loaded from user space
  * @udata: user data copied to kmem  (NOT NULL)
  * @size: the size of the user data
- * @lh: list to place unpacked profiles in a aa_repl_ws
+ * @lh: list to place unpacked profiles in a pyr_repl_ws
  * @ns: Returns namespace profile is in if specified else NULL (NOT NULL)
  *
  * Unpack user data and return refcounted allocated profile(s) stored in
@@ -795,12 +795,12 @@ struct aa_load_ent *aa_load_ent_alloc(void)
  *
  * Returns: profile(s) on @lh else error pointer if fails to unpack
  */
-int aa_unpack(void *udata, size_t size, struct list_head *lh, const char **ns)
+int pyr_unpack(void *udata, size_t size, struct list_head *lh, const char **ns)
 {
-	struct aa_load_ent *tmp, *ent;
-	struct aa_profile *profile = NULL;
+	struct pyr_load_ent *tmp, *ent;
+	struct pyr_profile *profile = NULL;
 	int error;
-	struct aa_ext e = {
+	struct pyr_ext e = {
 		.start = udata,
 		.end = udata + size,
 		.pos = udata,
@@ -824,12 +824,12 @@ int aa_unpack(void *udata, size_t size, struct list_head *lh, const char **ns)
 		if (error)
 			goto fail_profile;
 
-		error = aa_calc_profile_hash(profile, e.version, start,
+		error = pyr_calc_profile_hash(profile, e.version, start,
 						     e.pos - start);
 		if (error)
 			goto fail_profile;
 
-		ent = aa_load_ent_alloc();
+		ent = pyr_load_ent_alloc();
 		if (!ent) {
 			error = -ENOMEM;
 			goto fail_profile;
@@ -842,12 +842,12 @@ int aa_unpack(void *udata, size_t size, struct list_head *lh, const char **ns)
 	return 0;
 
 fail_profile:
-	aa_put_profile(profile);
+	pyr_put_profile(profile);
 
 fail:
 	list_for_each_entry_safe(ent, tmp, lh, list) {
 		list_del_init(&ent->list);
-		aa_load_ent_free(ent);
+		pyr_load_ent_free(ent);
 	}
 
 	return error;

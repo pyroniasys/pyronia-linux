@@ -18,7 +18,7 @@ config SECURITY_APPARMOR_BOOTPARAM_VALUE
 	int "AppArmor boot parameter default value"
 	depends on SECURITY_APPARMOR
 	range 0 1
-	default 1
+	default 0
 	help
 	  This option sets the default value for the kernel parameter
 	  'apparmor', which allows AppArmor to be enabled or disabled
@@ -28,7 +28,7 @@ config SECURITY_APPARMOR_BOOTPARAM_VALUE
 	  kernel parameter will default to 1, enabling AppArmor at
 	  boot.
 
-	  If you are unsure how to answer this question, answer 1.
+	  If you are unsure how to answer this question, answer 0.
 
 config SECURITY_APPARMOR_HASH
 	bool "Enable introspection of sha1 hashes for loaded profiles"

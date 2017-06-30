@@ -18,11 +18,11 @@
 #include <linux/vmalloc.h>
 
 #include "include/audit.h"
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 
 
 /**
- * aa_split_fqname - split a fqname into a profile and namespace name
+ * pyr_split_fqname - split a fqname into a profile and namespace name
  * @fqname: a full qualified name in namespace profile format (NOT NULL)
  * @ns_name: pointer to portion of the string containing the ns name (NOT NULL)
  *
@@ -35,7 +35,7 @@
  * NOTE: may modify the @fqname string.  The pointers returned point
  *       into the @fqname string.
  */
-char *aa_split_fqname(char *fqname, char **ns_name)
+char *pyr_split_fqname(char *fqname, char **ns_name)
 {
 	char *name = strim(fqname);
 
@@ -60,24 +60,24 @@ char *aa_split_fqname(char *fqname, char **ns_name)
 }
 
 /**
- * aa_info_message - log a none profile related status message
+ * pyr_info_message - log a none profile related status message
  * @str: message to log
  */
-void aa_info_message(const char *str)
+void pyr_info_message(const char *str)
 {
 	if (audit_enabled) {
 		struct common_audit_data sa;
-		struct apparmor_audit_data aad = {0,};
+		struct pyronia_audit_data pyrd = {0,};
 		sa.type = LSM_AUDIT_DATA_NONE;
-		sa.aad = &aad;
-		aad.info = str;
-		aa_audit_msg(AUDIT_APPARMOR_STATUS, &sa, NULL);
+		sa.pyrd = &pyrd;
+		pyrd.info = str;
+		pyr_audit_msg(AUDIT_PYRONIA_STATUS, &sa, NULL);
 	}
-	printk(KERN_INFO "AppArmor: %s\n", str);
+	printk(KERN_INFO "Pyronia: %s\n", str);
 }
 
 /**
- * __aa_kvmalloc - do allocation preferring kmalloc but falling back to vmalloc
+ * __pyr_kvmalloc - do allocation preferring kmalloc but falling back to vmalloc
  * @size: how many bytes of memory are required
  * @flags: the type of memory to allocate (see kmalloc).
  *
@@ -86,7 +86,7 @@ void aa_info_message(const char *str)
  * It is possible that policy being loaded from the user is larger than
  * what can be allocated by kmalloc, in those cases fall back to vmalloc.
  */
-void *__aa_kvmalloc(size_t size, gfp_t flags)
+void *__pyr_kvmalloc(size_t size, gfp_t flags)
 {
 	void *buffer = NULL;
 

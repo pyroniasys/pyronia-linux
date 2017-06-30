@@ -13,9 +13,9 @@
  * License.
  *
  *
- * AppArmor sets confinement on every task, via the the aa_task_cxt and
- * the aa_task_cxt.profile, both of which are required and are not allowed
- * to be NULL.  The aa_task_cxt is not reference counted and is unique
+ * AppArmor sets confinement on every task, via the the pyr_task_cxt and
+ * the pyr_task_cxt.profile, both of which are required and are not allowed
+ * to be NULL.  The pyr_task_cxt is not reference counted and is unique
  * to each cred (which is reference count).  The profile pointed to by
  * the task_cxt is reference counted.
  *
@@ -30,70 +30,70 @@
 #include "include/policy.h"
 
 /**
- * aa_alloc_task_context - allocate a new task_cxt
+ * pyr_alloc_task_context - allocate a new task_cxt
  * @flags: gfp flags for allocation
  *
  * Returns: allocated buffer or NULL on failure
  */
-struct aa_task_cxt *aa_alloc_task_context(gfp_t flags)
+struct pyr_task_cxt *pyr_alloc_task_context(gfp_t flags)
 {
-	return kzalloc(sizeof(struct aa_task_cxt), flags);
+	return kzalloc(sizeof(struct pyr_task_cxt), flags);
 }
 
 /**
- * aa_free_task_context - free a task_cxt
+ * pyr_free_task_context - free a task_cxt
  * @cxt: task_cxt to free (MAYBE NULL)
  */
-void aa_free_task_context(struct aa_task_cxt *cxt)
+void pyr_free_task_context(struct pyr_task_cxt *cxt)
 {
 	if (cxt) {
-		aa_put_profile(cxt->profile);
-		aa_put_profile(cxt->previous);
-		aa_put_profile(cxt->onexec);
+		pyr_put_profile(cxt->profile);
+		pyr_put_profile(cxt->previous);
+		pyr_put_profile(cxt->onexec);
 
 		kzfree(cxt);
 	}
 }
 
 /**
- * aa_dup_task_context - duplicate a task context, incrementing reference counts
+ * pyr_dup_task_context - duplicate a task context, incrementing reference counts
  * @new: a blank task context      (NOT NULL)
  * @old: the task context to copy  (NOT NULL)
  */
-void aa_dup_task_context(struct aa_task_cxt *new, const struct aa_task_cxt *old)
+void pyr_dup_task_context(struct pyr_task_cxt *new, const struct pyr_task_cxt *old)
 {
 	*new = *old;
-	aa_get_profile(new->profile);
-	aa_get_profile(new->previous);
-	aa_get_profile(new->onexec);
+	pyr_get_profile(new->profile);
+	pyr_get_profile(new->previous);
+	pyr_get_profile(new->onexec);
 }
 
 /**
- * aa_get_task_profile - Get another task's profile
+ * pyr_get_task_profile - Get another task's profile
  * @task: task to query  (NOT NULL)
  *
  * Returns: counted reference to @task's profile
  */
-struct aa_profile *aa_get_task_profile(struct task_struct *task)
+struct pyr_profile *pyr_get_task_profile(struct task_struct *task)
 {
-	struct aa_profile *p;
+	struct pyr_profile *p;
 
 	rcu_read_lock();
-	p = aa_get_profile(__aa_task_profile(task));
+	p = pyr_get_profile(__pyr_task_profile(task));
 	rcu_read_unlock();
 
 	return p;
 }
 
 /**
- * aa_replace_current_profile - replace the current tasks profiles
+ * pyr_replace_current_profile - replace the current tasks profiles
  * @profile: new profile  (NOT NULL)
  *
  * Returns: 0 or error on failure
  */
-int aa_replace_current_profile(struct aa_profile *profile)
+int pyr_replace_current_profile(struct pyr_profile *profile)
 {
-	struct aa_task_cxt *cxt = current_cxt();
+	struct pyr_task_cxt *cxt = current_cxt();
 	struct cred *new;
 	BUG_ON(!profile);
 
@@ -109,14 +109,14 @@ int aa_replace_current_profile(struct aa_profile *profile)
 		/* if switching to unconfined or a different profile namespace
 		 * clear out context state
 		 */
-		aa_clear_task_cxt_trans(cxt);
+		pyr_clear_task_cxt_trans(cxt);
 
 	/* be careful switching cxt->profile, when racing replacement it
 	 * is possible that cxt->profile->replacedby->profile is the reference
 	 * keeping @profile valid, so make sure to get its reference before
 	 * dropping the reference on cxt->profile */
-	aa_get_profile(profile);
-	aa_put_profile(cxt->profile);
+	pyr_get_profile(profile);
+	pyr_put_profile(cxt->profile);
 	cxt->profile = profile;
 
 	commit_creds(new);
@@ -124,21 +124,21 @@ int aa_replace_current_profile(struct aa_profile *profile)
 }
 
 /**
- * aa_set_current_onexec - set the tasks change_profile to happen onexec
+ * pyr_set_current_onexec - set the tasks change_profile to happen onexec
  * @profile: system profile to set at exec  (MAYBE NULL to clear value)
  *
  * Returns: 0 or error on failure
  */
-int aa_set_current_onexec(struct aa_profile *profile)
+int pyr_set_current_onexec(struct pyr_profile *profile)
 {
-	struct aa_task_cxt *cxt;
+	struct pyr_task_cxt *cxt;
 	struct cred *new = prepare_creds();
 	if (!new)
 		return -ENOMEM;
 
 	cxt = cred_cxt(new);
-	aa_get_profile(profile);
-	aa_put_profile(cxt->onexec);
+	pyr_get_profile(profile);
+	pyr_put_profile(cxt->onexec);
 	cxt->onexec = profile;
 
 	commit_creds(new);
@@ -146,7 +146,7 @@ int aa_set_current_onexec(struct aa_profile *profile)
 }
 
 /**
- * aa_set_current_hat - set the current tasks hat
+ * pyr_set_current_hat - set the current tasks hat
  * @profile: profile to set as the current hat  (NOT NULL)
  * @token: token value that must be specified to change from the hat
  *
@@ -155,9 +155,9 @@ int aa_set_current_onexec(struct aa_profile *profile)
  *
  * Returns: 0 or error on failure
  */
-int aa_set_current_hat(struct aa_profile *profile, u64 token)
+int pyr_set_current_hat(struct pyr_profile *profile, u64 token)
 {
-	struct aa_task_cxt *cxt;
+	struct pyr_task_cxt *cxt;
 	struct cred *new = prepare_creds();
 	if (!new)
 		return -ENOMEM;
@@ -169,15 +169,15 @@ int aa_set_current_hat(struct aa_profile *profile, u64 token)
 		cxt->previous = cxt->profile;
 		cxt->token = token;
 	} else if (cxt->token == token) {
-		aa_put_profile(cxt->profile);
+		pyr_put_profile(cxt->profile);
 	} else {
 		/* previous_profile && cxt->token != token */
 		abort_creds(new);
 		return -EACCES;
 	}
-	cxt->profile = aa_get_newest_profile(profile);
+	cxt->profile = pyr_get_newest_profile(profile);
 	/* clear exec on switching context */
-	aa_put_profile(cxt->onexec);
+	pyr_put_profile(cxt->onexec);
 	cxt->onexec = NULL;
 
 	commit_creds(new);
@@ -185,7 +185,7 @@ int aa_set_current_hat(struct aa_profile *profile, u64 token)
 }
 
 /**
- * aa_restore_previous_profile - exit from hat context restoring the profile
+ * pyr_restore_previous_profile - exit from hat context restoring the profile
  * @token: the token that must be matched to exit hat context
  *
  * Attempt to return out of a hat to the previous profile.  The token
@@ -193,9 +193,9 @@ int aa_set_current_hat(struct aa_profile *profile, u64 token)
  *
  * Returns: 0 or error of failure
  */
-int aa_restore_previous_profile(u64 token)
+int pyr_restore_previous_profile(u64 token)
 {
-	struct aa_task_cxt *cxt;
+	struct pyr_task_cxt *cxt;
 	struct cred *new = prepare_creds();
 	if (!new)
 		return -ENOMEM;
@@ -211,11 +211,11 @@ int aa_restore_previous_profile(u64 token)
 		return 0;
 	}
 
-	aa_put_profile(cxt->profile);
-	cxt->profile = aa_get_newest_profile(cxt->previous);
+	pyr_put_profile(cxt->profile);
+	cxt->profile = pyr_get_newest_profile(cxt->previous);
 	BUG_ON(!cxt->profile);
 	/* clear exec && prev information when restoring to previous context */
-	aa_clear_task_cxt_trans(cxt);
+	pyr_clear_task_cxt_trans(cxt);
 
 	commit_creds(new);
 	return 0;

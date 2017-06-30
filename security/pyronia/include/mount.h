@@ -11,8 +11,8 @@
  * License.
  */
 
-#ifndef __AA_MOUNT_H
-#define __AA_MOUNT_H
+#ifndef __PYR_MOUNT_H
+#define __PYR_MOUNT_H
 
 #include <linux/fs.h>
 #include <linux/path.h>
@@ -21,34 +21,34 @@
 #include "policy.h"
 
 /* mount perms */
-#define AA_MAY_PIVOTROOT	0x01
-#define AA_MAY_MOUNT		0x02
-#define AA_MAY_UMOUNT		0x04
-#define AA_AUDIT_DATA		0x40
-#define AA_CONT_MATCH		0x40
+#define PYR_MAY_PIVOTROOT	0x01
+#define PYR_MAY_MOUNT		0x02
+#define PYR_MAY_UMOUNT		0x04
+#define PYR_AUDIT_DATA		0x40
+#define PYR_CONT_MATCH		0x40
 
-#define AA_MS_IGNORE_MASK (MS_KERNMOUNT | MS_NOSEC | MS_ACTIVE | MS_BORN)
+#define PYR_MS_IGNORE_MASK (MS_KERNMOUNT | MS_NOSEC | MS_ACTIVE | MS_BORN)
 
-int aa_remount(struct aa_profile *profile, const struct path *path,
+int pyr_remount(struct pyr_profile *profile, const struct path *path,
 	       unsigned long flags, void *data);
 
-int aa_bind_mount(struct aa_profile *profile, const struct path *path,
+int pyr_bind_mount(struct pyr_profile *profile, const struct path *path,
 		  const char *old_name, unsigned long flags);
 
 
-int aa_mount_change_type(struct aa_profile *profile, const struct path *path,
+int pyr_mount_change_type(struct pyr_profile *profile, const struct path *path,
 			 unsigned long flags);
 
-int aa_move_mount(struct aa_profile *profile, const struct path *path,
+int pyr_move_mount(struct pyr_profile *profile, const struct path *path,
 		  const char *old_name);
 
-int aa_new_mount(struct aa_profile *profile, const char *dev_name,
+int pyr_new_mount(struct pyr_profile *profile, const char *dev_name,
 		 const struct path *path, const char *type, unsigned long flags,
 		 void *data);
 
-int aa_umount(struct aa_profile *profile, struct vfsmount *mnt, int flags);
+int pyr_umount(struct pyr_profile *profile, struct vfsmount *mnt, int flags);
 
-int aa_pivotroot(struct aa_profile *profile, const struct path *old_path,
+int pyr_pivotroot(struct pyr_profile *profile, const struct path *old_path,
 		 const struct path *new_path);
 
-#endif /* __AA_MOUNT_H */
+#endif /* __PYR_MOUNT_H */

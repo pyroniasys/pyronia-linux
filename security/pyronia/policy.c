@@ -77,7 +77,7 @@
 #include <linux/spinlock.h>
 #include <linux/string.h>
 
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 #include "include/capability.h"
 #include "include/context.h"
 #include "include/file.h"
@@ -90,9 +90,9 @@
 
 
 /* root profile namespace */
-struct aa_namespace *root_ns;
+struct pyr_namespace *pyr_root_ns;
 
-const char *const aa_profile_mode_names[] = {
+const char *const pyr_profile_mode_names[] = {
 	"enforce",
 	"complain",
 	"kill",
@@ -125,7 +125,7 @@ static const char *hname_tail(const char *hname)
  *
  * Returns: true if policy init successful
  */
-static bool policy_init(struct aa_policy *policy, const char *prefix,
+static bool policy_init(struct pyr_policy *policy, const char *prefix,
 			const char *name)
 {
 	/* freed by policy_free */
@@ -150,17 +150,17 @@ static bool policy_init(struct aa_policy *policy, const char *prefix,
  * policy_destroy - free the elements referenced by @policy
  * @policy: policy that is to have its elements freed  (NOT NULL)
  */
-static void policy_destroy(struct aa_policy *policy)
+static void policy_destroy(struct pyr_policy *policy)
 {
 	/* still contains profiles -- invalid */
 	if (on_list_rcu(&policy->profiles)) {
-		AA_ERROR("%s: internal error, "
+		PYR_ERROR("%s: internal error, "
 			 "policy '%s' still contains profiles\n",
 			 __func__, policy->name);
 		BUG();
 	}
 	if (on_list_rcu(&policy->list)) {
-		AA_ERROR("%s: internal error, policy '%s' still on list\n",
+		PYR_ERROR("%s: internal error, policy '%s' still on list\n",
 			 __func__, policy->name);
 		BUG();
 	}
@@ -178,9 +178,9 @@ static void policy_destroy(struct aa_policy *policy)
  *
  * Returns: unrefcounted policy that match @name or NULL if not found
  */
-static struct aa_policy *__policy_find(struct list_head *head, const char *name)
+static struct pyr_policy *__policy_find(struct list_head *head, const char *name)
 {
-	struct aa_policy *policy;
+	struct pyr_policy *policy;
 
 	list_for_each_entry_rcu(policy, head, list) {
 		if (!strcmp(policy->name, name))
@@ -202,13 +202,13 @@ static struct aa_policy *__policy_find(struct list_head *head, const char *name)
  * if @len == strlen(@strlen) then this is equiv to __policy_find
  * other wise it allows searching for policy by a partial match of name
  */
-static struct aa_policy *__policy_strn_find(struct list_head *head,
+static struct pyr_policy *__policy_strn_find(struct list_head *head,
 					    const char *str, int len)
 {
-	struct aa_policy *policy;
+	struct pyr_policy *policy;
 
 	list_for_each_entry_rcu(policy, head, list) {
-		if (aa_strneq(policy->name, str, len))
+		if (pyr_strneq(policy->name, str, len))
 			return policy;
 	}
 
@@ -221,13 +221,13 @@ static struct aa_policy *__policy_strn_find(struct list_head *head,
 
 static const char *hidden_ns_name = "---";
 /**
- * aa_ns_visible - test if @view is visible from @curr
+ * pyr_ns_visible - test if @view is visible from @curr
  * @curr: namespace to treat as the parent (NOT NULL)
  * @view:  namespace to test if visible from @curr (NOT NULL)
  *
  * Returns: true if @view is visible from @curr else false
  */
-bool aa_ns_visible(struct aa_namespace *curr, struct aa_namespace *view)
+bool pyr_ns_visible(struct pyr_namespace *curr, struct pyr_namespace *view)
 {
 	if (curr == view)
 		return true;
@@ -240,19 +240,19 @@ bool aa_ns_visible(struct aa_namespace *curr, struct aa_namespace *view)
 }
 
 /**
- * aa_na_name - Find the ns name to display for @view from @curr
+ * pyr_na_name - Find the ns name to display for @view from @curr
  * @curr - current namespace (NOT NULL)
  * @view - namespace attempting to view (NOT NULL)
  *
  * Returns: name of @view visible from @curr
  */
-const char *aa_ns_name(struct aa_namespace *curr, struct aa_namespace *view)
+const char *pyr_ns_name(struct pyr_namespace *curr, struct pyr_namespace *view)
 {
 	/* if view == curr then the namespace name isn't displayed */
 	if (curr == view)
 		return "";
 
-	if (aa_ns_visible(curr, view)) {
+	if (pyr_ns_visible(curr, view)) {
 		/* at this point if a ns is visible it is in a view ns
 		 * thus the curr ns.hname is a prefix of its name.
 		 * Only output the virtualized portion of the name
@@ -271,13 +271,13 @@ const char *aa_ns_name(struct aa_namespace *curr, struct aa_namespace *view)
  *
  * Returns: refcounted namespace or NULL on failure.
  */
-static struct aa_namespace *alloc_namespace(const char *prefix,
+static struct pyr_namespace *alloc_namespace(const char *prefix,
 					    const char *name)
 {
-	struct aa_namespace *ns;
+	struct pyr_namespace *ns;
 
 	ns = kzalloc(sizeof(*ns), GFP_KERNEL);
-	AA_DEBUG("%s(%p)\n", __func__, ns);
+	PYR_DEBUG("%s(%p)\n", __func__, ns);
 	if (!ns)
 		return NULL;
 	if (!policy_init(&ns->base, prefix, name))
@@ -287,13 +287,13 @@ static struct aa_namespace *alloc_namespace(const char *prefix,
 	mutex_init(&ns->lock);
 
 	/* released by free_namespace */
-	ns->unconfined = aa_alloc_profile("unconfined");
+	ns->unconfined = pyr_alloc_profile("unconfined");
 	if (!ns->unconfined)
 		goto fail_unconfined;
 
 	ns->unconfined->flags = PFLAG_IX_ON_NAME_ERROR |
 		PFLAG_IMMUTABLE | PFLAG_NS_COUNT;
-	ns->unconfined->mode = APPARMOR_UNCONFINED;
+	ns->unconfined->mode = PYRONIA_UNCONFINED;
 
 	/* ns and ns->unconfined share ns->unconfined refcount */
 	ns->unconfined->ns = ns;
@@ -316,21 +316,21 @@ fail_ns:
  * Requires: All references to the namespace must have been put, if the
  *           namespace was referenced by a profile confining a task,
  */
-static void free_namespace(struct aa_namespace *ns)
+static void free_namespace(struct pyr_namespace *ns)
 {
 	if (!ns)
 		return;
 
 	policy_destroy(&ns->base);
-	aa_put_namespace(ns->parent);
+	pyr_put_namespace(ns->parent);
 
 	ns->unconfined->ns = NULL;
-	aa_free_profile(ns->unconfined);
+	pyr_free_profile(ns->unconfined);
 	kzfree(ns);
 }
 
 /**
- * __aa_find_namespace - find a namespace on a list by @name
+ * __pyr_find_namespace - find a namespace on a list by @name
  * @head: list to search for namespace on  (NOT NULL)
  * @name: name of namespace to look for  (NOT NULL)
  *
@@ -338,14 +338,14 @@ static void free_namespace(struct aa_namespace *ns)
  *
  * Requires: rcu_read_lock be held
  */
-static struct aa_namespace *__aa_find_namespace(struct list_head *head,
+static struct pyr_namespace *__pyr_find_namespace(struct list_head *head,
 						const char *name)
 {
-	return (struct aa_namespace *)__policy_find(head, name);
+	return (struct pyr_namespace *)__policy_find(head, name);
 }
 
 /**
- * aa_find_namespace  -  look up a profile namespace on the namespace list
+ * pyr_find_namespace  -  look up a profile namespace on the namespace list
  * @root: namespace to search in  (NOT NULL)
  * @name: name of namespace to find  (NOT NULL)
  *
@@ -354,57 +354,57 @@ static struct aa_namespace *__aa_find_namespace(struct list_head *head,
  *
  * refcount released by caller
  */
-struct aa_namespace *aa_find_namespace(struct aa_namespace *root,
+struct pyr_namespace *pyr_find_namespace(struct pyr_namespace *root,
 				       const char *name)
 {
-	struct aa_namespace *ns = NULL;
+	struct pyr_namespace *ns = NULL;
 
 	rcu_read_lock();
-	ns = aa_get_namespace(__aa_find_namespace(&root->sub_ns, name));
+	ns = pyr_get_namespace(__pyr_find_namespace(&root->sub_ns, name));
 	rcu_read_unlock();
 
 	return ns;
 }
 
 /**
- * aa_prepare_namespace - find an existing or create a new namespace of @name
+ * pyr_prepare_namespace - find an existing or create a new namespace of @name
  * @name: the namespace to find or add  (MAYBE NULL)
  *
  * Returns: refcounted namespace or NULL if failed to create one
  */
-static struct aa_namespace *aa_prepare_namespace(const char *name)
+static struct pyr_namespace *pyr_prepare_namespace(const char *name)
 {
-	struct aa_namespace *ns, *root;
+	struct pyr_namespace *ns, *root;
 
-	root = aa_current_profile()->ns;
+	root = pyr_current_profile()->ns;
 
 	mutex_lock(&root->lock);
 
 	/* if name isn't specified the profile is loaded to the current ns */
 	if (!name) {
 		/* released by caller */
-		ns = aa_get_namespace(root);
+		ns = pyr_get_namespace(root);
 		goto out;
 	}
 
 	/* try and find the specified ns and if it doesn't exist create it */
 	/* released by caller */
-	ns = aa_get_namespace(__aa_find_namespace(&root->sub_ns, name));
+	ns = pyr_get_namespace(__pyr_find_namespace(&root->sub_ns, name));
 	if (!ns) {
 		ns = alloc_namespace(root->base.hname, name);
 		if (!ns)
 			goto out;
-		if (__aa_fs_namespace_mkdir(ns, ns_subns_dir(root), name)) {
-			AA_ERROR("Failed to create interface for ns %s\n",
+		if (__pyr_fs_namespace_mkdir(ns, ns_subns_dir(root), name)) {
+			PYR_ERROR("Failed to create interface for ns %s\n",
 				 ns->base.name);
 			free_namespace(ns);
 			ns = NULL;
 			goto out;
 		}
-		ns->parent = aa_get_namespace(root);
+		ns->parent = pyr_get_namespace(root);
 		list_add_rcu(&ns->base.list, &root->sub_ns);
 		/* add list ref */
-		aa_get_namespace(ns);
+		pyr_get_namespace(ns);
 	}
 out:
 	mutex_unlock(&root->lock);
@@ -423,11 +423,11 @@ out:
  * Requires: namespace lock be held, or list not be shared
  */
 static void __list_add_profile(struct list_head *list,
-			       struct aa_profile *profile)
+			       struct pyr_profile *profile)
 {
 	list_add_rcu(&profile->base.list, list);
 	/* get list reference */
-	aa_get_profile(profile);
+	pyr_get_profile(profile);
 }
 
 /**
@@ -442,10 +442,10 @@ static void __list_add_profile(struct list_head *list,
  *
  * Requires: namespace lock be held, or list not have been live
  */
-static void __list_remove_profile(struct aa_profile *profile)
+static void __list_remove_profile(struct pyr_profile *profile)
 {
 	list_del_rcu(&profile->base.list);
-	aa_put_profile(profile);
+	pyr_put_profile(profile);
 }
 
 static void __profile_list_release(struct list_head *head);
@@ -456,13 +456,13 @@ static void __profile_list_release(struct list_head *head);
  *
  * Requires: namespace list lock be held, or list not be shared
  */
-static void __remove_profile(struct aa_profile *profile)
+static void __remove_profile(struct pyr_profile *profile)
 {
 	/* release any children lists first */
 	__profile_list_release(&profile->base.profiles);
 	/* released by free_profile */
-	__aa_update_replacedby(profile, profile->ns->unconfined);
-	__aa_fs_profile_rmdir(profile);
+	__pyr_update_replacedby(profile, profile->ns->unconfined);
+	__pyr_fs_profile_rmdir(profile);
 	__list_remove_profile(profile);
 }
 
@@ -474,7 +474,7 @@ static void __remove_profile(struct aa_profile *profile)
  */
 static void __profile_list_release(struct list_head *head)
 {
-	struct aa_profile *profile, *tmp;
+	struct pyr_profile *profile, *tmp;
 	list_for_each_entry_safe(profile, tmp, head, base.list)
 		__remove_profile(profile);
 }
@@ -485,7 +485,7 @@ static void __ns_list_release(struct list_head *head);
  * destroy_namespace - remove everything contained by @ns
  * @ns: namespace to have it contents removed  (NOT NULL)
  */
-static void destroy_namespace(struct aa_namespace *ns)
+static void destroy_namespace(struct pyr_namespace *ns)
 {
 	if (!ns)
 		return;
@@ -498,8 +498,8 @@ static void destroy_namespace(struct aa_namespace *ns)
 	__ns_list_release(&ns->sub_ns);
 
 	if (ns->parent)
-		__aa_update_replacedby(ns->unconfined, ns->parent->unconfined);
-	__aa_fs_namespace_rmdir(ns);
+		__pyr_update_replacedby(ns->unconfined, ns->parent->unconfined);
+	__pyr_fs_namespace_rmdir(ns);
 	mutex_unlock(&ns->lock);
 }
 
@@ -509,12 +509,12 @@ static void destroy_namespace(struct aa_namespace *ns)
  *
  * Requires: ns->parent->lock be held and ns removed from parent.
  */
-static void __remove_namespace(struct aa_namespace *ns)
+static void __remove_namespace(struct pyr_namespace *ns)
 {
 	/* remove ns from namespace list */
 	list_del_rcu(&ns->base.list);
 	destroy_namespace(ns);
-	aa_put_namespace(ns);
+	pyr_put_namespace(ns);
 }
 
 /**
@@ -525,60 +525,60 @@ static void __remove_namespace(struct aa_namespace *ns)
  */
 static void __ns_list_release(struct list_head *head)
 {
-	struct aa_namespace *ns, *tmp;
+	struct pyr_namespace *ns, *tmp;
 	list_for_each_entry_safe(ns, tmp, head, base.list)
 		__remove_namespace(ns);
 
 }
 
 /**
- * aa_alloc_root_ns - allocate the root profile namespace
+ * pyr_alloc_root_ns - allocate the root profile namespace
  *
  * Returns: %0 on success else error
  *
  */
-int __init aa_alloc_root_ns(void)
+int __init pyr_alloc_root_ns(void)
 {
-	/* released by aa_free_root_ns - used as list ref*/
-	root_ns = alloc_namespace(NULL, "root");
-	if (!root_ns)
+	/* released by pyr_free_root_ns - used as list ref*/
+	pyr_root_ns = alloc_namespace(NULL, "root");
+	if (!pyr_root_ns)
 		return -ENOMEM;
 
 	return 0;
 }
 
  /**
-  * aa_free_root_ns - free the root profile namespace
+  * pyr_free_root_ns - free the root profile namespace
   */
-void __init aa_free_root_ns(void)
+void __init pyr_free_root_ns(void)
  {
-	 struct aa_namespace *ns = root_ns;
-	 root_ns = NULL;
+	 struct pyr_namespace *ns = pyr_root_ns;
+	 pyr_root_ns = NULL;
 
 	 destroy_namespace(ns);
-	 aa_put_namespace(ns);
+	 pyr_put_namespace(ns);
 }
 
 
-static void free_replacedby(struct aa_replacedby *r)
+static void free_replacedby(struct pyr_replacedby *r)
 {
 	if (r) {
 		/* r->profile will not be updated any more as r is dead */
-		aa_put_profile(rcu_dereference_protected(r->profile, true));
+		pyr_put_profile(rcu_dereference_protected(r->profile, true));
 		kzfree(r);
 	}
 }
 
 
-void aa_free_replacedby_kref(struct kref *kref)
+void pyr_free_replacedby_kref(struct kref *kref)
 {
-	struct aa_replacedby *r = container_of(kref, struct aa_replacedby,
+	struct pyr_replacedby *r = container_of(kref, struct pyr_replacedby,
 					       count);
 	free_replacedby(r);
 }
 
 /**
- * aa_free_profile - free a profile
+ * pyr_free_profile - free a profile
  * @profile: the profile to free  (MAYBE NULL)
  *
  * Free a profile, its hats and null_profile. All references to the profile,
@@ -587,73 +587,73 @@ void aa_free_replacedby_kref(struct kref *kref)
  * If the profile was referenced from a task context, free_profile() will
  * be called from an rcu callback routine, so we must not sleep here.
  */
-void aa_free_profile(struct aa_profile *profile)
+void pyr_free_profile(struct pyr_profile *profile)
 {
-	AA_DEBUG("%s(%p)\n", __func__, profile);
+	PYR_DEBUG("%s(%p)\n", __func__, profile);
 
 	if (!profile)
 		return;
 
 	/* free children profiles */
 	policy_destroy(&profile->base);
-	aa_put_profile(rcu_access_pointer(profile->parent));
+	pyr_put_profile(rcu_access_pointer(profile->parent));
 
-	aa_put_namespace(profile->ns);
+	pyr_put_namespace(profile->ns);
 	kzfree(profile->rename);
 
-	aa_free_file_rules(&profile->file);
-	aa_free_cap_rules(&profile->caps);
-	aa_free_net_rules(&profile->net);
-	aa_free_rlimit_rules(&profile->rlimits);
+	pyr_free_file_rules(&profile->file);
+	pyr_free_cap_rules(&profile->caps);
+	pyr_free_net_rules(&profile->net);
+	pyr_free_rlimit_rules(&profile->rlimits);
 
 	kzfree(profile->dirname);
-	aa_put_dfa(profile->xmatch);
-	aa_put_dfa(profile->policy.dfa);
-	aa_put_replacedby(profile->replacedby);
+	pyr_put_dfa(profile->xmatch);
+	pyr_put_dfa(profile->policy.dfa);
+	pyr_put_replacedby(profile->replacedby);
 
 	kzfree(profile->hash);
 	kzfree(profile);
 }
 
 /**
- * aa_free_profile_rcu - free aa_profile by rcu (called by aa_free_profile_kref)
+ * pyr_free_profile_rcu - free pyr_profile by rcu (called by pyr_free_profile_kref)
  * @head: rcu_head callback for freeing of a profile  (NOT NULL)
  */
-static void aa_free_profile_rcu(struct rcu_head *head)
+static void pyr_free_profile_rcu(struct rcu_head *head)
 {
-	struct aa_profile *p = container_of(head, struct aa_profile, rcu);
+	struct pyr_profile *p = container_of(head, struct pyr_profile, rcu);
 	if (p->flags & PFLAG_NS_COUNT)
 		free_namespace(p->ns);
 	else
-		aa_free_profile(p);
+		pyr_free_profile(p);
 }
 
 /**
- * aa_free_profile_kref - free aa_profile by kref (called by aa_put_profile)
+ * pyr_free_profile_kref - free pyr_profile by kref (called by pyr_put_profile)
  * @kr: kref callback for freeing of a profile  (NOT NULL)
  */
-void aa_free_profile_kref(struct kref *kref)
+void pyr_free_profile_kref(struct kref *kref)
 {
-	struct aa_profile *p = container_of(kref, struct aa_profile, count);
-	call_rcu(&p->rcu, aa_free_profile_rcu);
+	struct pyr_profile *p = container_of(kref, struct pyr_profile, count);
+	call_rcu(&p->rcu, pyr_free_profile_rcu);
 }
 
 /**
- * aa_alloc_profile - allocate, initialize and return a new profile
+ * pyr_alloc_profile - allocate, initialize and return a new profile
  * @hname: name of the profile  (NOT NULL)
  *
  * Returns: refcount profile or NULL on failure
  */
-struct aa_profile *aa_alloc_profile(const char *hname)
+struct pyr_profile *pyr_alloc_profile(const char *hname)
 {
-	struct aa_profile *profile;
+	struct pyr_profile *profile;
 
-	/* freed by free_profile - usually through aa_put_profile */
+	/* freed by free_profile - usually through pyr_put_profile */
 	profile = kzalloc(sizeof(*profile), GFP_KERNEL);
 	if (!profile)
 		return NULL;
 
-	profile->replacedby = kzalloc(sizeof(struct aa_replacedby), GFP_KERNEL);
+	profile->replacedby = kzalloc(sizeof(struct pyr_replacedby), GFP_KERNEL);
 	if (!profile->replacedby)
 		goto fail;
 	kref_init(&profile->replacedby->count);
@@ -673,7 +673,7 @@ fail:
 }
 
 /**
- * aa_new_null_profile - create a new null-X learning profile
+ * pyr_new_null_profile - create a new null-X learning profile
  * @parent: profile that caused this profile to be created (NOT NULL)
  * @hat: true if the null- learning profile is a hat
  *
@@ -686,9 +686,9 @@ fail:
  *
  * Returns: new refcounted profile else NULL on failure
  */
-struct aa_profile *aa_new_null_profile(struct aa_profile *parent, int hat)
+struct pyr_profile *pyr_new_null_profile(struct pyr_profile *parent, int hat)
 {
-	struct aa_profile *profile = NULL;
+	struct pyr_profile *profile = NULL;
 	char *name;
 	int uniq = atomic_inc_return(&parent->ns->uniq_null);
 
@@ -698,19 +698,19 @@ struct aa_profile *aa_new_null_profile(struct aa_profile *parent, int hat)
 		goto fail;
 	sprintf(name, "%s//null-%x", parent->base.hname, uniq);
 
-	profile = aa_alloc_profile(name);
+	profile = pyr_alloc_profile(name);
 	kfree(name);
 	if (!profile)
 		goto fail;
 
-	profile->mode = APPARMOR_COMPLAIN;
+	profile->mode = PYRONIA_COMPLAIN;
 	profile->flags = PFLAG_NULL;
 	if (hat)
 		profile->flags |= PFLAG_HAT;
 
 	/* released on free_profile */
-	rcu_assign_pointer(profile->parent, aa_get_profile(parent));
-	profile->ns = aa_get_namespace(parent->ns);
+	rcu_assign_pointer(profile->parent, pyr_get_profile(parent));
+	profile->ns = pyr_get_namespace(parent->ns);
 
 	mutex_lock(&profile->ns->lock);
 	__list_add_profile(&parent->base.profiles, profile);
@@ -734,9 +734,9 @@ fail:
  *
  * Returns: unrefcounted profile ptr, or NULL if not found
  */
-static struct aa_profile *__find_child(struct list_head *head, const char *name)
+static struct pyr_profile *__find_child(struct list_head *head, const char *name)
 {
-	return (struct aa_profile *)__policy_find(head, name);
+	return (struct pyr_profile *)__policy_find(head, name);
 }
 
 /**
@@ -749,27 +749,27 @@ static struct aa_profile *__find_child(struct list_head *head, const char *name)
  *
  * Returns: unrefcounted profile ptr, or NULL if not found
  */
-static struct aa_profile *__strn_find_child(struct list_head *head,
+static struct pyr_profile *__strn_find_child(struct list_head *head,
 					    const char *name, int len)
 {
-	return (struct aa_profile *)__policy_strn_find(head, name, len);
+	return (struct pyr_profile *)__policy_strn_find(head, name, len);
 }
 
 /**
- * aa_find_child - find a profile by @name in @parent
+ * pyr_find_child - find a profile by @name in @parent
  * @parent: profile to search  (NOT NULL)
  * @name: profile name to search for  (NOT NULL)
  *
  * Returns: a refcounted profile or NULL if not found
  */
-struct aa_profile *aa_find_child(struct aa_profile *parent, const char *name)
+struct pyr_profile *pyr_find_child(struct pyr_profile *parent, const char *name)
 {
-	struct aa_profile *profile;
+	struct pyr_profile *profile;
 
 	rcu_read_lock();
 	do {
 		profile = __find_child(&parent->base.profiles, name);
-	} while (profile && !aa_get_profile_not0(profile));
+	} while (profile && !pyr_get_profile_not0(profile));
 	rcu_read_unlock();
 
 	/* refcount released by caller */
@@ -789,11 +789,11 @@ struct aa_profile *aa_find_child(struct aa_profile *parent, const char *name)
  *
  * Returns: unrefcounted policy or NULL if not found
  */
-static struct aa_policy *__lookup_parent(struct aa_namespace *ns,
+static struct pyr_policy *__lookup_parent(struct pyr_namespace *ns,
 					 const char *hname)
 {
-	struct aa_policy *policy;
-	struct aa_profile *profile = NULL;
+	struct pyr_policy *policy;
+	struct pyr_profile *profile = NULL;
 	char *split;
 
 	policy = &ns->base;
@@ -823,10 +823,10 @@ static struct aa_policy *__lookup_parent(struct aa_namespace *ns,
  *
  * Do a relative name lookup, recursing through profile tree.
  */
-static struct aa_profile *__lookup_profile(struct aa_policy *base,
+static struct pyr_profile *__lookup_profile(struct pyr_policy *base,
 					   const char *hname)
 {
-	struct aa_profile *profile = NULL;
+	struct pyr_profile *profile = NULL;
 	char *split;
 
 	for (split = strstr(hname, "//"); split;) {
@@ -846,25 +846,25 @@ static struct aa_profile *__lookup_profile(struct aa_policy *base,
 }
 
 /**
- * aa_lookup_profile - find a profile by its full or partial name
+ * pyr_lookup_profile - find a profile by its full or partial name
  * @ns: the namespace to start from (NOT NULL)
  * @hname: name to do lookup on.  Does not contain namespace prefix (NOT NULL)
  *
  * Returns: refcounted profile or NULL if not found
  */
-struct aa_profile *aa_lookup_profile(struct aa_namespace *ns, const char *hname)
+struct pyr_profile *pyr_lookup_profile(struct pyr_namespace *ns, const char *hname)
 {
-	struct aa_profile *profile;
+	struct pyr_profile *profile;
 
 	rcu_read_lock();
 	do {
 		profile = __lookup_profile(&ns->base, hname);
-	} while (profile && !aa_get_profile_not0(profile));
+	} while (profile && !pyr_get_profile_not0(profile));
 	rcu_read_unlock();
 
 	/* the unconfined profile is not in the regular profile list */
 	if (!profile && strcmp(hname, "unconfined") == 0)
-		profile = aa_get_newest_profile(ns->unconfined);
+		profile = pyr_get_newest_profile(ns->unconfined);
 
 	/* refcount released by caller */
 	return profile;
@@ -878,7 +878,7 @@ struct aa_profile *aa_lookup_profile(struct aa_namespace *ns, const char *hname)
  *
  * Returns: %0 if replacement allowed else error code
  */
-static int replacement_allowed(struct aa_profile *profile, int noreplace,
+static int replacement_allowed(struct pyr_profile *profile, int noreplace,
 			       const char **info)
 {
 	if (profile) {
@@ -894,7 +894,7 @@ static int replacement_allowed(struct aa_profile *profile, int noreplace,
 }
 
 /**
- * aa_audit_policy - Do auditing of policy changes
+ * pyr_audit_policy - Do auditing of policy changes
  * @op: policy operation being performed
  * @gfp: memory allocation flags
  * @name: name of profile being manipulated (NOT NULL)
@@ -907,19 +907,19 @@ static int audit_policy(int op, gfp_t gfp, const char *name, const char *info,
 			int error)
 {
 	struct common_audit_data sa;
-	struct apparmor_audit_data aad = {0,};
+	struct pyronia_audit_data pyrd = {0,};
 	sa.type = LSM_AUDIT_DATA_NONE;
-	sa.aad = &aad;
-	aad.op = op;
-	aad.name = name;
-	aad.info = info;
-	aad.error = error;
+	sa.pyrd = &pyrd;
+	pyrd.op = op;
+	pyrd.name = name;
+	pyrd.info = info;
+	pyrd.error = error;
 
-	return aa_audit(AUDIT_APPARMOR_STATUS, __aa_current_profile(), gfp,
+	return pyr_audit(AUDIT_PYRONIA_STATUS, __pyr_current_profile(), gfp,
 			&sa, NULL);
 }
 
-bool policy_view_capable(void)
+bool pyr_policy_view_capable(void)
 {
 	struct user_namespace *user_ns = current_user_ns();
 	bool response = false;
@@ -930,26 +930,26 @@ bool policy_view_capable(void)
 	return response;
 }
 
-bool policy_admin_capable(void)
+bool pyr_policy_admin_capable(void)
 {
-	return policy_view_capable() && !aa_g_lock_policy;
+	return pyr_policy_view_capable() && !pyr_g_lock_policy;
 }
 
 /**
- * aa_may_manage_policy - can the current task manage policy
+ * pyr_may_manage_policy - can the current task manage policy
  * @op: the policy manipulation operation being done
  *
  * Returns: true if the task is allowed to manipulate policy
  */
-bool aa_may_manage_policy(int op)
+bool pyr_may_manage_policy(int op)
 {
 	/* check if loading policy is locked out */
-	if (aa_g_lock_policy) {
+	if (pyr_g_lock_policy) {
 		audit_policy(op, GFP_KERNEL, NULL, "policy_locked", -EACCES);
 		return 0;
 	}
 
-	if (!policy_admin_capable()) {
+	if (!pyr_policy_admin_capable()) {
 		audit_policy(op, GFP_KERNEL, NULL, "not policy admin", -EACCES);
 		return 0;
 	}
@@ -957,12 +957,12 @@ bool aa_may_manage_policy(int op)
 	return 1;
 }
 
-static struct aa_profile *__list_lookup_parent(struct list_head *lh,
-					       struct aa_profile *profile)
+static struct pyr_profile *__list_lookup_parent(struct list_head *lh,
+					       struct pyr_profile *profile)
 {
 	const char *base = hname_tail(profile->base.hname);
 	long len = base - profile->base.hname;
-	struct aa_load_ent *ent;
+	struct pyr_load_ent *ent;
 
 	/* parent won't have trailing // so remove from len */
 	if (len <= 2)
@@ -993,17 +993,17 @@ static struct aa_profile *__list_lookup_parent(struct list_head *lh,
  *
  * Requires: namespace list lock be held, or list not be shared
  */
-static void __replace_profile(struct aa_profile *old, struct aa_profile *new,
+static void __replace_profile(struct pyr_profile *old, struct pyr_profile *new,
 			      bool share_replacedby)
 {
-	struct aa_profile *child, *tmp;
+	struct pyr_profile *child, *tmp;
 
 	if (!list_empty(&old->base.profiles)) {
 		LIST_HEAD(lh);
 		list_splice_init_rcu(&old->base.profiles, &lh, synchronize_rcu);
 
 		list_for_each_entry_safe(child, tmp, &lh, base.list) {
-			struct aa_profile *p;
+			struct pyr_profile *p;
 
 			list_del_init(&child->base.list);
 			p = __find_child(&new->base.profiles, child->base.name);
@@ -1016,32 +1016,32 @@ static void __replace_profile(struct aa_profile *old, struct aa_profile *new,
 			/* inherit @child and its children */
 			/* TODO: update hname of inherited children */
 			/* list refcount transferred to @new */
-			p = aa_deref_parent(child);
-			rcu_assign_pointer(child->parent, aa_get_profile(new));
+			p = pyr_deref_parent(child);
+			rcu_assign_pointer(child->parent, pyr_get_profile(new));
 			list_add_rcu(&child->base.list, &new->base.profiles);
-			aa_put_profile(p);
+			pyr_put_profile(p);
 		}
 	}
 
 	if (!rcu_access_pointer(new->parent)) {
-		struct aa_profile *parent = aa_deref_parent(old);
-		rcu_assign_pointer(new->parent, aa_get_profile(parent));
+		struct pyr_profile *parent = pyr_deref_parent(old);
+		rcu_assign_pointer(new->parent, pyr_get_profile(parent));
 	}
-	__aa_update_replacedby(old, new);
+	__pyr_update_replacedby(old, new);
 	if (share_replacedby) {
-		aa_put_replacedby(new->replacedby);
-		new->replacedby = aa_get_replacedby(old->replacedby);
+		pyr_put_replacedby(new->replacedby);
+		new->replacedby = pyr_get_replacedby(old->replacedby);
 	} else if (!rcu_access_pointer(new->replacedby->profile))
-		/* aafs interface uses replacedby */
+		/* pyrfs interface uses replacedby */
 		rcu_assign_pointer(new->replacedby->profile,
-				   aa_get_profile(new));
-	__aa_fs_profile_migrate_dents(old, new);
+				   pyr_get_profile(new));
+	__pyr_fs_profile_migrate_dents(old, new);
 
 	if (list_empty(&new->base.list)) {
 		/* new is not on a list already */
 		list_replace_rcu(&old->base.list, &new->base.list);
-		aa_get_profile(new);
-		aa_put_profile(old);
+		pyr_get_profile(new);
+		pyr_put_profile(old);
 	} else
 		__list_remove_profile(old);
 }
@@ -1056,11 +1056,11 @@ static void __replace_profile(struct aa_profile *old, struct aa_profile *new,
  *
  * Returns: profile to replace (no ref) on success else ptr error
  */
-static int __lookup_replace(struct aa_namespace *ns, const char *hname,
-			    bool noreplace, struct aa_profile **p,
+static int __lookup_replace(struct pyr_namespace *ns, const char *hname,
+			    bool noreplace, struct pyr_profile **p,
 			    const char **info)
 {
-	*p = aa_get_profile(__lookup_profile(&ns->base, hname));
+	*p = pyr_get_profile(__lookup_profile(&ns->base, hname));
 	if (*p) {
 		int error = replacement_allowed(*p, noreplace, info);
 		if (error) {
@@ -1073,33 +1073,33 @@ static int __lookup_replace(struct aa_namespace *ns, const char *hname,
 }
 
 /**
- * aa_replace_profiles - replace profile(s) on the profile list
+ * pyr_replace_profiles - replace profile(s) on the profile list
  * @udata: serialized data stream  (NOT NULL)
  * @size: size of the serialized data stream
  * @noreplace: true if only doing addition, no replacement allowed
  *
  * unpack and replace a profile on the profile list and uses of that profile
- * by any aa_task_cxt.  If the profile does not exist on the profile list
+ * by any pyr_task_cxt.  If the profile does not exist on the profile list
  * it is added.
  *
  * Returns: size of data consumed else error code on failure.
  */
-ssize_t aa_replace_profiles(void *udata, size_t size, bool noreplace)
+ssize_t pyr_replace_profiles(void *udata, size_t size, bool noreplace)
 {
 	const char *ns_name, *info = NULL;
-	struct aa_namespace *ns = NULL;
-	struct aa_load_ent *ent, *tmp;
+	struct pyr_namespace *ns = NULL;
+	struct pyr_load_ent *ent, *tmp;
 	int op = OP_PROF_REPL;
 	ssize_t error;
 	LIST_HEAD(lh);
 
 	/* released below */
-	error = aa_unpack(udata, size, &lh, &ns_name);
+	error = pyr_unpack(udata, size, &lh, &ns_name);
 	if (error)
 		goto out;
 
 	/* released below */
-	ns = aa_prepare_namespace(ns_name);
+	ns = pyr_prepare_namespace(ns_name);
 	if (!ns) {
 		error = audit_policy(op, GFP_KERNEL, ns_name,
 				     "failed to prepare namespace", -ENOMEM);
@@ -1109,7 +1109,7 @@ ssize_t aa_replace_profiles(void *udata, size_t size, bool noreplace)
 	mutex_lock(&ns->lock);
 	/* setup parent and ns info */
 	list_for_each_entry(ent, &lh, list) {
-		struct aa_policy *policy;
+		struct pyr_policy *policy;
 		error = __lookup_replace(ns, ent->new->base.hname, noreplace,
 					 &ent->old, &info);
 		if (error)
@@ -1124,7 +1124,7 @@ ssize_t aa_replace_profiles(void *udata, size_t size, bool noreplace)
 		}
 
 		/* released when @new is freed */
-		ent->new->ns = aa_get_namespace(ns);
+		ent->new->ns = pyr_get_namespace(ns);
 
 		if (ent->old || ent->rename)
 			continue;
@@ -1132,18 +1132,18 @@ ssize_t aa_replace_profiles(void *udata, size_t size, bool noreplace)
 		/* no ref on policy only use inside lock */
 		policy = __lookup_parent(ns, ent->new->base.hname);
 		if (!policy) {
-			struct aa_profile *p;
+			struct pyr_profile *p;
 			p = __list_lookup_parent(&lh, ent->new);
 			if (!p) {
 				error = -ENOENT;
 				info = "parent does not exist";
 				goto fail_lock;
 			}
-			rcu_assign_pointer(ent->new->parent, aa_get_profile(p));
+			rcu_assign_pointer(ent->new->parent, pyr_get_profile(p));
 		} else if (policy != &ns->base) {
 			/* released on profile replacement or free_profile */
-			struct aa_profile *p = (struct aa_profile *) policy;
-			rcu_assign_pointer(ent->new->parent, aa_get_profile(p));
+			struct pyr_profile *p = (struct pyr_profile *) policy;
+			rcu_assign_pointer(ent->new->parent, pyr_get_profile(p));
 		}
 	}
 
@@ -1159,12 +1159,12 @@ ssize_t aa_replace_profiles(void *udata, size_t size, bool noreplace)
 		} else {
 			struct dentry *parent;
 			if (rcu_access_pointer(ent->new->parent)) {
-				struct aa_profile *p;
-				p = aa_deref_parent(ent->new);
+				struct pyr_profile *p;
+				p = pyr_deref_parent(ent->new);
 				parent = prof_child_dir(p);
 			} else
 				parent = ns_subprofs_dir(ent->new->ns);
-			error = __aa_fs_profile_mkdir(ent->new, parent);
+			error = __pyr_fs_profile_mkdir(ent->new, parent);
 		}
 
 		if (error) {
@@ -1183,45 +1183,45 @@ ssize_t aa_replace_profiles(void *udata, size_t size, bool noreplace)
 		if (ent->old) {
 			__replace_profile(ent->old, ent->new, 1);
 			if (ent->rename) {
-				/* aafs interface uses replacedby */
-				struct aa_replacedby *r = ent->new->replacedby;
+				/* pyrfs interface uses replacedby */
+				struct pyr_replacedby *r = ent->new->replacedby;
 				rcu_assign_pointer(r->profile,
-						   aa_get_profile(ent->new));
+						   pyr_get_profile(ent->new));
 				__replace_profile(ent->rename, ent->new, 0);
 			}
 		} else if (ent->rename) {
-			/* aafs interface uses replacedby */
+			/* pyrfs interface uses replacedby */
 			rcu_assign_pointer(ent->new->replacedby->profile,
-					   aa_get_profile(ent->new));
+					   pyr_get_profile(ent->new));
 			__replace_profile(ent->rename, ent->new, 0);
 		} else if (ent->new->parent) {
-			struct aa_profile *parent, *newest;
-			parent = aa_deref_parent(ent->new);
-			newest = aa_get_newest_profile(parent);
+			struct pyr_profile *parent, *newest;
+			parent = pyr_deref_parent(ent->new);
+			newest = pyr_get_newest_profile(parent);
 
 			/* parent replaced in this atomic set? */
 			if (newest != parent) {
-				aa_get_profile(newest);
+				pyr_get_profile(newest);
 				rcu_assign_pointer(ent->new->parent, newest);
-				aa_put_profile(parent);
+				pyr_put_profile(parent);
 			}
-			/* aafs interface uses replacedby */
+			/* pyrfs interface uses replacedby */
 			rcu_assign_pointer(ent->new->replacedby->profile,
-					   aa_get_profile(ent->new));
+					   pyr_get_profile(ent->new));
 			__list_add_profile(&newest->base.profiles, ent->new);
-			aa_put_profile(newest);
+			pyr_put_profile(newest);
 		} else {
-			/* aafs interface uses replacedby */
+			/* pyrfs interface uses replacedby */
 			rcu_assign_pointer(ent->new->replacedby->profile,
-					   aa_get_profile(ent->new));
+					   pyr_get_profile(ent->new));
 			__list_add_profile(&ns->base.profiles, ent->new);
 		}
-		aa_load_ent_free(ent);
+		pyr_load_ent_free(ent);
 	}
 	mutex_unlock(&ns->lock);
 
 out:
-	aa_put_namespace(ns);
+	pyr_put_namespace(ns);
 
 	if (error)
 		return error;
@@ -1247,14 +1247,14 @@ fail_lock:
 free:
 	list_for_each_entry_safe(ent, tmp, &lh, list) {
 		list_del_init(&ent->list);
-		aa_load_ent_free(ent);
+		pyr_load_ent_free(ent);
 	}
 
 	goto out;
 }
 
 /**
- * aa_remove_profiles - remove profile(s) from the system
+ * pyr_remove_profiles - remove profile(s) from the system
  * @fqname: name of the profile or namespace to remove  (NOT NULL)
  * @size: size of the name
  *
@@ -1265,10 +1265,10 @@ free:
  *
  * Returns: size of data consume else error code if fails
  */
-ssize_t aa_remove_profiles(char *fqname, size_t size)
+ssize_t pyr_remove_profiles(char *fqname, size_t size)
 {
-	struct aa_namespace *root, *ns = NULL;
-	struct aa_profile *profile = NULL;
+	struct pyr_namespace *root, *ns = NULL;
+	struct pyr_profile *profile = NULL;
 	const char *name = fqname, *info = NULL;
 	ssize_t error = 0;
 
@@ -1278,13 +1278,13 @@ ssize_t aa_remove_profiles(char *fqname, size_t size)
 		goto fail;
 	}
 
-	root = aa_current_profile()->ns;
+	root = pyr_current_profile()->ns;
 
 	if (fqname[0] == ':') {
 		char *ns_name;
-		name = aa_split_fqname(fqname, &ns_name);
+		name = pyr_split_fqname(fqname, &ns_name);
 		/* released below */
-		ns = aa_find_namespace(root, ns_name);
+		ns = pyr_find_namespace(root, ns_name);
 		if (!ns) {
 			info = "namespace does not exist";
 			error = -ENOENT;
@@ -1292,7 +1292,7 @@ ssize_t aa_remove_profiles(char *fqname, size_t size)
 		}
 	} else
 		/* released below */
-		ns = aa_get_namespace(root);
+		ns = pyr_get_namespace(root);
 
 	if (!name) {
 		/* remove namespace - can only happen if fqname[0] == ':' */
@@ -1302,7 +1302,7 @@ ssize_t aa_remove_profiles(char *fqname, size_t size)
 	} else {
 		/* remove profile */
 		mutex_lock(&ns->lock);
-		profile = aa_get_profile(__lookup_profile(&ns->base, name));
+		profile = pyr_get_profile(__lookup_profile(&ns->base, name));
 		if (!profile) {
 			error = -ENOENT;
 			info = "profile does not exist";
@@ -1315,13 +1315,13 @@ ssize_t aa_remove_profiles(char *fqname, size_t size)
 
 	/* don't fail removal if audit fails */
 	(void) audit_policy(OP_PROF_RM, GFP_KERNEL, name, info, error);
-	aa_put_namespace(ns);
-	aa_put_profile(profile);
+	pyr_put_namespace(ns);
+	pyr_put_profile(profile);
 	return size;
 
 fail_ns_lock:
 	mutex_unlock(&ns->lock);
-	aa_put_namespace(ns);
+	pyr_put_namespace(ns);
 
 fail:
 	(void) audit_policy(OP_PROF_RM, GFP_KERNEL, name, info, error);

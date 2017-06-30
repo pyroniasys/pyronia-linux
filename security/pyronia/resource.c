@@ -24,8 +24,8 @@
  */
 #include "rlim_names.h"
 
-struct aa_fs_entry aa_fs_entry_rlimit[] = {
-	AA_FS_FILE_STRING("mask", AA_FS_RLIMIT_MASK),
+struct pyr_fs_entry pyr_fs_entry_rlimit[] = {
+	PYR_FS_FILE_STRING("mask", PYR_FS_RLIMIT_MASK),
 	{ }
 };
 
@@ -35,7 +35,7 @@ static void audit_cb(struct audit_buffer *ab, void *va)
 	struct common_audit_data *sa = va;
 
 	audit_log_format(ab, " rlimit=%s value=%lu",
-			 rlim_names[sa->aad->rlim.rlim], sa->aad->rlim.max);
+			 rlim_names[sa->pyrd->rlim.rlim], sa->pyrd->rlim.max);
 }
 
 /**
@@ -47,24 +47,24 @@ static void audit_cb(struct audit_buffer *ab, void *va)
  *
  * Returns: 0 or sa->error else other error code on failure
  */
-static int audit_resource(struct aa_profile *profile, unsigned int resource,
+static int audit_resource(struct pyr_profile *profile, unsigned int resource,
 			  unsigned long value, int error)
 {
 	struct common_audit_data sa;
-	struct apparmor_audit_data aad = {0,};
+	struct pyronia_audit_data pyrd = {0,};
 
 	sa.type = LSM_AUDIT_DATA_NONE;
-	sa.aad = &aad;
-	aad.op = OP_SETRLIMIT,
-	aad.rlim.rlim = resource;
-	aad.rlim.max = value;
-	aad.error = error;
-	return aa_audit(AUDIT_APPARMOR_AUTO, profile, GFP_KERNEL, &sa,
+	sa.pyrd = &pyrd;
+	pyrd.op = OP_SETRLIMIT,
+	pyrd.rlim.rlim = resource;
+	pyrd.rlim.max = value;
+	pyrd.error = error;
+	return pyr_audit(AUDIT_PYRONIA_AUTO, profile, GFP_KERNEL, &sa,
 			audit_cb);
 }
 
 /**
- * aa_map_resouce - map compiled policy resource to internal #
+ * pyr_map_resouce - map compiled policy resource to internal #
  * @resource: flattened policy resource number
  *
  * Returns: resource # for the current architecture.
@@ -72,13 +72,13 @@ static int audit_resource(struct aa_profile *profile, unsigned int resource,
  * rlimit resource can vary based on architecture, map the compiled policy
  * resource # to the internal representation for the architecture.
  */
-int aa_map_resource(int resource)
+int pyr_map_resource(int resource)
 {
 	return rlim_map[resource];
 }
 
 /**
- * aa_task_setrlimit - test permission to set an rlimit
+ * pyr_task_setrlimit - test permission to set an rlimit
  * @profile - profile confining the task  (NOT NULL)
  * @task - task the resource is being set on
  * @resource - the resource being set
@@ -88,14 +88,14 @@ int aa_map_resource(int resource)
  *
  * Returns: 0 or error code if setting resource failed
  */
-int aa_task_setrlimit(struct aa_profile *profile, struct task_struct *task,
+int pyr_task_setrlimit(struct pyr_profile *profile, struct task_struct *task,
 		      unsigned int resource, struct rlimit *new_rlim)
 {
-	struct aa_profile *task_profile;
+	struct pyr_profile *task_profile;
 	int error = 0;
 
 	rcu_read_lock();
-	task_profile = aa_get_profile(aa_cred_profile(__task_cred(task)));
+	task_profile = pyr_get_profile(pyr_cred_profile(__task_cred(task)));
 	rcu_read_unlock();
 
 	/* TODO: extend resource control to handle other (non current)
@@ -105,22 +105,22 @@ int aa_task_setrlimit(struct aa_profile *profile, struct task_struct *task,
 	 * task has CAP_SYS_RESOURCE.
 	 */
 	if ((profile != task_profile &&
-	     aa_capable(profile, CAP_SYS_RESOURCE, 1)) ||
+	     pyr_capable(profile, CAP_SYS_RESOURCE, 1)) ||
 	    (profile->rlimits.mask & (1 << resource) &&
 	     new_rlim->rlim_max > profile->rlimits.limits[resource].rlim_max))
 		error = -EACCES;
 
-	aa_put_profile(task_profile);
+	pyr_put_profile(task_profile);
 
 	return audit_resource(profile, resource, new_rlim->rlim_max, error);
 }
 
 /**
- * __aa_transition_rlimits - apply new profile rlimits
+ * __pyr_transition_rlimits - apply new profile rlimits
  * @old: old profile on task  (NOT NULL)
  * @new: new profile with rlimits to apply  (NOT NULL)
  */
-void __aa_transition_rlimits(struct aa_profile *old, struct aa_profile *new)
+void __pyr_transition_rlimits(struct pyr_profile *old, struct pyr_profile *new)
 {
 	unsigned int mask = 0;
 	struct rlimit *rlim, *initrlim;

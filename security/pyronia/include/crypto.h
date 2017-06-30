@@ -11,26 +11,26 @@
  * License.
  */
 
-#ifndef __APPARMOR_CRYPTO_H
-#define __APPARMOR_CRYPTO_H
+#ifndef __PYRONIA_CRYPTO_H
+#define __PYRONIA_CRYPTO_H
 
 #include "policy.h"
 
-#ifdef CONFIG_SECURITY_APPARMOR_HASH
-unsigned int aa_hash_size(void);
-int aa_calc_profile_hash(struct aa_profile *profile, u32 version, void *start,
+#ifdef CONFIG_SECURITY_PYRONIA_HASH
+unsigned int pyr_hash_size(void);
+int pyr_calc_profile_hash(struct pyr_profile *profile, u32 version, void *start,
 			 size_t len);
 #else
-static inline int aa_calc_profile_hash(struct aa_profile *profile, u32 version,
+static inline int pyr_calc_profile_hash(struct pyr_profile *profile, u32 version,
 				       void *start, size_t len)
 {
 	return 0;
 }
 
-static inline unsigned int aa_hash_size(void)
+static inline unsigned int pyr_hash_size(void)
 {
 	return 0;
 }
 #endif
 
-#endif /* __APPARMOR_CRYPTO_H */
+#endif /* __PYRONIA_CRYPTO_H */

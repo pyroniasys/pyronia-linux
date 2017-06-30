@@ -12,39 +12,39 @@
  * License.
  */
 
-#ifndef __AA_RESOURCE_H
-#define __AA_RESOURCE_H
+#ifndef __PYR_RESOURCE_H
+#define __PYR_RESOURCE_H
 
 #include <linux/resource.h>
 #include <linux/sched.h>
 
-#include "apparmorfs.h"
+#include "pyroniafs.h"
 
-struct aa_profile;
+struct pyr_profile;
 
-/* struct aa_rlimit - rlimit settings for the profile
+/* struct pyr_rlimit - rlimit settings for the profile
  * @mask: which hard limits to set
  * @limits: rlimit values that override task limits
  *
  * AppArmor rlimits are used to set confined task rlimits.  Only the
- * limits specified in @mask will be controlled by apparmor.
+ * limits specified in @mask will be controlled by pyronia.
  */
-struct aa_rlimit {
+struct pyr_rlimit {
 	unsigned int mask;
 	struct rlimit limits[RLIM_NLIMITS];
 };
 
-extern struct aa_fs_entry aa_fs_entry_rlimit[];
+extern struct pyr_fs_entry pyr_fs_entry_rlimit[];
 
-int aa_map_resource(int resource);
-int aa_task_setrlimit(struct aa_profile *profile, struct task_struct *,
+int pyr_map_resource(int resource);
+int pyr_task_setrlimit(struct pyr_profile *profile, struct task_struct *,
 		      unsigned int resource, struct rlimit *new_rlim);
 
-void __aa_transition_rlimits(struct aa_profile *old, struct aa_profile *new);
+void __pyr_transition_rlimits(struct pyr_profile *old, struct pyr_profile *new);
 
-static inline void aa_free_rlimit_rules(struct aa_rlimit *rlims)
+static inline void pyr_free_rlimit_rules(struct pyr_rlimit *rlims)
 {
 	/* NOP */
 }
 
-#endif /* __AA_RESOURCE_H */
+#endif /* __PYR_RESOURCE_H */

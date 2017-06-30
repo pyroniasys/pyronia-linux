@@ -26,41 +26,41 @@ static void audit_cb(struct audit_buffer *ab, void *va)
 {
 	struct common_audit_data *sa = va;
 	audit_log_format(ab, " target=");
-	audit_log_untrustedstring(ab, sa->aad->target);
+	audit_log_untrustedstring(ab, sa->pyrd->target);
 }
 
 /**
- * aa_audit_ptrace - do auditing for ptrace
+ * pyr_audit_ptrace - do auditing for ptrace
  * @profile: profile being enforced  (NOT NULL)
  * @target: profile being traced (NOT NULL)
  * @error: error condition
  *
  * Returns: %0 or error code
  */
-static int aa_audit_ptrace(struct aa_profile *profile,
-			   struct aa_profile *target, int error)
+static int pyr_audit_ptrace(struct pyr_profile *profile,
+			   struct pyr_profile *target, int error)
 {
 	struct common_audit_data sa;
-	struct apparmor_audit_data aad = {0,};
+	struct pyronia_audit_data pyrd = {0,};
 	sa.type = LSM_AUDIT_DATA_NONE;
-	sa.aad = &aad;
-	aad.op = OP_PTRACE;
-	aad.target = target;
-	aad.error = error;
+	sa.pyrd = &pyrd;
+	pyrd.op = OP_PTRACE;
+	pyrd.target = target;
+	pyrd.error = error;
 
-	return aa_audit(AUDIT_APPARMOR_AUTO, profile, GFP_ATOMIC, &sa,
+	return pyr_audit(AUDIT_PYRONIA_AUTO, profile, GFP_ATOMIC, &sa,
 			audit_cb);
 }
 
 /**
- * aa_may_ptrace - test if tracer task can trace the tracee
+ * pyr_may_ptrace - test if tracer task can trace the tracee
  * @tracer: profile of the task doing the tracing  (NOT NULL)
  * @tracee: task to be traced
  * @mode: whether PTRACE_MODE_READ || PTRACE_MODE_ATTACH
  *
  * Returns: %0 else error code if permission denied or error
  */
-int aa_may_ptrace(struct aa_profile *tracer, struct aa_profile *tracee,
+int pyr_may_ptrace(struct pyr_profile *tracer, struct pyr_profile *tracee,
 		  unsigned int mode)
 {
 	/* TODO: currently only based on capability, not extended ptrace
@@ -71,18 +71,18 @@ int aa_may_ptrace(struct aa_profile *tracer, struct aa_profile *tracee,
 	if (unconfined(tracer) || tracer == tracee)
 		return 0;
 	/* log this capability request */
-	return aa_capable(tracer, CAP_SYS_PTRACE, 1);
+	return pyr_capable(tracer, CAP_SYS_PTRACE, 1);
 }
 
 /**
- * aa_ptrace - do ptrace permission check and auditing
+ * pyr_ptrace - do ptrace permission check and auditing
  * @tracer: task doing the tracing (NOT NULL)
  * @tracee: task being traced (NOT NULL)
  * @mode: ptrace mode either PTRACE_MODE_READ || PTRACE_MODE_ATTACH
  *
  * Returns: %0 else error code if permission denied or error
  */
-int aa_ptrace(struct task_struct *tracer, struct task_struct *tracee,
+int pyr_ptrace(struct task_struct *tracer, struct task_struct *tracee,
 	      unsigned int mode)
 {
 	/*
@@ -94,18 +94,18 @@ int aa_ptrace(struct task_struct *tracer, struct task_struct *tracee,
 	 *       - tracer profile has CAP_SYS_PTRACE
 	 */
 
-	struct aa_profile *tracer_p = aa_get_task_profile(tracer);
+	struct pyr_profile *tracer_p = pyr_get_task_profile(tracer);
 	int error = 0;
 
 	if (!unconfined(tracer_p)) {
-		struct aa_profile *tracee_p = aa_get_task_profile(tracee);
+		struct pyr_profile *tracee_p = pyr_get_task_profile(tracee);
 
-		error = aa_may_ptrace(tracer_p, tracee_p, mode);
-		error = aa_audit_ptrace(tracer_p, tracee_p, error);
+		error = pyr_may_ptrace(tracer_p, tracee_p, mode);
+		error = pyr_audit_ptrace(tracer_p, tracee_p, error);
 
-		aa_put_profile(tracee_p);
+		pyr_put_profile(tracee_p);
 	}
-	aa_put_profile(tracer_p);
+	pyr_put_profile(tracer_p);
 
 	return error;
 }

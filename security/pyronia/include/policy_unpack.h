@@ -17,15 +17,15 @@
 
 #include <linux/list.h>
 
-struct aa_load_ent {
+struct pyr_load_ent {
 	struct list_head list;
-	struct aa_profile *new;
-	struct aa_profile *old;
-	struct aa_profile *rename;
+	struct pyr_profile *new;
+	struct pyr_profile *old;
+	struct pyr_profile *rename;
 };
 
-void aa_load_ent_free(struct aa_load_ent *ent);
-struct aa_load_ent *aa_load_ent_alloc(void);
+void pyr_load_ent_free(struct pyr_load_ent *ent);
+struct pyr_load_ent *pyr_load_ent_alloc(void);
 
 #define PACKED_FLAG_HAT		1
 
@@ -34,6 +34,6 @@ struct aa_load_ent *aa_load_ent_alloc(void);
 #define PACKED_MODE_KILL	2
 #define PACKED_MODE_UNCONFINED	3
 
-int aa_unpack(void *udata, size_t size, struct list_head *lh, const char **ns);
+int pyr_unpack(void *udata, size_t size, struct list_head *lh, const char **ns);
 
 #endif /* __POLICY_INTERFACE_H */

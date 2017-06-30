@@ -30,9 +30,9 @@ static DEFINE_SPINLOCK(sid_lock);
 /* TODO FIXME: add sid to profile mapping, and sid recycling */
 
 /**
- * aa_alloc_sid - allocate a new sid for a profile
+ * pyr_alloc_sid - allocate a new sid for a profile
  */
-u32 aa_alloc_sid(void)
+u32 pyr_alloc_sid(void)
 {
 	u32 sid;
 
@@ -46,10 +46,10 @@ u32 aa_alloc_sid(void)
 }
 
 /**
- * aa_free_sid - free a sid
+ * pyr_free_sid - free a sid
  * @sid: sid to free
  */
-void aa_free_sid(u32 sid)
+void pyr_free_sid(u32 sid)
 {
 	;			/* NOP ATM */
 }

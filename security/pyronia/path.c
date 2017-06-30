@@ -21,7 +21,7 @@
 #include <linux/slab.h>
 #include <linux/fs_struct.h>
 
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 #include "include/path.h"
 #include "include/policy.h"
 
@@ -197,10 +197,10 @@ static int get_name_to_buffer(const struct path *path, int flags, char *buffer,
 }
 
 /**
- * aa_path_name - compute the pathname of a file
+ * pyr_path_name - compute the pathname of a file
  * @path: path the file  (NOT NULL)
  * @flags: flags controlling path name generation
- * @buffer: buffer that aa_get_name() allocated  (NOT NULL)
+ * @buffer: buffer that pyr_get_name() allocated  (NOT NULL)
  * @name: Returns - the generated path name if !error (NOT NULL)
  * @info: Returns - information on why the path lookup failed (MAYBE NULL)
  *
@@ -215,7 +215,7 @@ static int get_name_to_buffer(const struct path *path, int flags, char *buffer,
  *
  * Returns: %0 else error code if could retrieve name
  */
-int aa_path_name(const struct path *path, int flags, char **buffer,
+int pyr_path_name(const struct path *path, int flags, char **buffer,
 		 const char **name, const char **info)
 {
 	char *buf, *str = NULL;
@@ -236,7 +236,7 @@ int aa_path_name(const struct path *path, int flags, char **buffer,
 
 		kfree(buf);
 		size <<= 1;
-		if (size > aa_g_path_max)
+		if (size > pyr_g_path_max)
 			return -ENAMETOOLONG;
 		*info = NULL;
 	}

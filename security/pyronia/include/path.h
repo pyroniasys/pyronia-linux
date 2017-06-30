@@ -12,8 +12,8 @@
  * License.
  */
 
-#ifndef __AA_PATH_H
-#define __AA_PATH_H
+#ifndef __PYR_PATH_H
+#define __PYR_PATH_H
 
 
 enum path_flags {
@@ -26,7 +26,7 @@ enum path_flags {
 	PATH_MEDIATE_DELETED = 0x10000,	/* mediate deleted paths */
 };
 
-int aa_path_name(const struct path *path, int flags, char **buffer,
+int pyr_path_name(const struct path *path, int flags, char **buffer,
 		 const char **name, const char **info);
 
-#endif /* __AA_PATH_H */
+#endif /* __PYR_PATH_H */

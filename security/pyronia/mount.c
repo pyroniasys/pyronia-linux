@@ -16,7 +16,7 @@
 #include <linux/mount.h>
 #include <linux/namei.h>
 
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 #include "include/audit.h"
 #include "include/context.h"
 #include "include/domain.h"
@@ -90,26 +90,26 @@ static void audit_cb(struct audit_buffer *ab, void *va)
 {
 	struct common_audit_data *sa = va;
 
-	if (sa->aad->mnt.type) {
+	if (sa->pyrd->mnt.type) {
 		audit_log_format(ab, " fstype=");
-		audit_log_untrustedstring(ab, sa->aad->mnt.type);
+		audit_log_untrustedstring(ab, sa->pyrd->mnt.type);
 	}
-	if (sa->aad->mnt.src_name) {
+	if (sa->pyrd->mnt.src_name) {
 		audit_log_format(ab, " srcname=");
-		audit_log_untrustedstring(ab, sa->aad->mnt.src_name);
+		audit_log_untrustedstring(ab, sa->pyrd->mnt.src_name);
 	}
-	if (sa->aad->mnt.trans) {
+	if (sa->pyrd->mnt.trans) {
 		audit_log_format(ab, " trans=");
-		audit_log_untrustedstring(ab, sa->aad->mnt.trans);
+		audit_log_untrustedstring(ab, sa->pyrd->mnt.trans);
 	}
-	if (sa->aad->mnt.flags || sa->aad->op == OP_MOUNT) {
+	if (sa->pyrd->mnt.flags || sa->pyrd->op == OP_MOUNT) {
 		audit_log_format(ab, " flags=\"");
-		audit_mnt_flags(ab, sa->aad->mnt.flags);
+		audit_mnt_flags(ab, sa->pyrd->mnt.flags);
 		audit_log_format(ab, "\"");
 	}
-	if (sa->aad->mnt.data) {
+	if (sa->pyrd->mnt.data) {
 		audit_log_format(ab, " options=");
-		audit_log_untrustedstring(ab, sa->aad->mnt.data);
+		audit_log_untrustedstring(ab, sa->pyrd->mnt.data);
 	}
 }
 
@@ -131,15 +131,15 @@ static void audit_cb(struct audit_buffer *ab, void *va)
  *
  * Returns: %0 or error on failure
  */
-static int audit_mount(struct aa_profile *profile, gfp_t gfp, int op,
+static int audit_mount(struct pyr_profile *profile, gfp_t gfp, int op,
 		       const char *name, const char *src_name,
 		       const char *type, const char *trans,
 		       unsigned long flags, const void *data, u32 request,
 		       struct file_perms *perms, const char *info, int error)
 {
-	int audit_type = AUDIT_APPARMOR_AUTO;
+	int audit_type = AUDIT_PYRONIA_AUTO;
 	struct common_audit_data sa = { };
-	struct apparmor_audit_data aad = { };
+	struct pyronia_audit_data pyrd = { };
 
 	if (likely(!error)) {
 		u32 mask = perms->audit;
@@ -152,13 +152,13 @@ static int audit_mount(struct aa_profile *profile, gfp_t gfp, int op,
 
 		if (likely(!request))
 			return 0;
-		audit_type = AUDIT_APPARMOR_AUDIT;
+		audit_type = AUDIT_PYRONIA_AUDIT;
 	} else {
 		/* only report permissions that were denied */
 		request = request & ~perms->allow;
 
 		if (request & perms->kill)
-			audit_type = AUDIT_APPARMOR_KILL;
+			audit_type = AUDIT_PYRONIA_KILL;
 
 		/* quiet known rejects, assumes quiet and kill do not overlap */
 		if ((request & perms->quiet) &&
@@ -172,19 +172,19 @@ static int audit_mount(struct aa_profile *profile, gfp_t gfp, int op,
 	}
 
 	sa.type = LSM_AUDIT_DATA_NONE;
-	sa.aad = &aad;
-	sa.aad->op = op;
-	sa.aad->name = name;
-	sa.aad->mnt.src_name = src_name;
-	sa.aad->mnt.type = type;
-	sa.aad->mnt.trans = trans;
-	sa.aad->mnt.flags = flags;
-	if (data && (perms->audit & AA_AUDIT_DATA))
-		sa.aad->mnt.data = data;
-	sa.aad->info = info;
-	sa.aad->error = error;
+	sa.pyrd = &pyrd;
+	sa.pyrd->op = op;
+	sa.pyrd->name = name;
+	sa.pyrd->mnt.src_name = src_name;
+	sa.pyrd->mnt.type = type;
+	sa.pyrd->mnt.trans = trans;
+	sa.pyrd->mnt.flags = flags;
+	if (data && (perms->audit & PYR_AUDIT_DATA))
+		sa.pyrd->mnt.data = data;
+	sa.pyrd->info = info;
+	sa.pyrd->error = error;
 
-	return aa_audit(audit_type, profile, gfp, &sa, audit_cb);
+	return pyr_audit(audit_type, profile, gfp, &sa, audit_cb);
 }
 
 /**
@@ -199,14 +199,14 @@ static int audit_mount(struct aa_profile *profile, gfp_t gfp, int op,
  *
  * Returns: next state after flags match
  */
-static unsigned int match_mnt_flags(struct aa_dfa *dfa, unsigned int state,
+static unsigned int match_mnt_flags(struct pyr_dfa *dfa, unsigned int state,
 				    unsigned long flags)
 {
 	unsigned int i;
 
 	for (i = 0; i <= 31 ; ++i) {
 		if ((1 << i) & flags)
-			state = aa_dfa_next(dfa, state, i + 1);
+			state = pyr_dfa_next(dfa, state, i + 1);
 	}
 
 	return state;
@@ -219,7 +219,7 @@ static unsigned int match_mnt_flags(struct aa_dfa *dfa, unsigned int state,
  *
  * Returns: mount permissions
  */
-static struct file_perms compute_mnt_perms(struct aa_dfa *dfa,
+static struct file_perms compute_mnt_perms(struct pyr_dfa *dfa,
 					   unsigned int state)
 {
 	struct file_perms perms;
@@ -246,27 +246,27 @@ static const char const *mnt_info_table[] = {
  * Returns 0 on success else element that match failed in, this is the
  * index into the mnt_info_table above
  */
-static int do_match_mnt(struct aa_dfa *dfa, unsigned int start,
+static int do_match_mnt(struct pyr_dfa *dfa, unsigned int start,
 			const char *mntpnt, const char *devname,
 			const char *type, unsigned long flags,
 			void *data, bool binary, struct file_perms *perms)
 {
 	unsigned int state;
 
-	state = aa_dfa_match(dfa, start, mntpnt);
-	state = aa_dfa_null_transition(dfa, state);
+	state = pyr_dfa_match(dfa, start, mntpnt);
+	state = pyr_dfa_null_transition(dfa, state);
 	if (!state)
 		return 1;
 
 	if (devname)
-		state = aa_dfa_match(dfa, state, devname);
-	state = aa_dfa_null_transition(dfa, state);
+		state = pyr_dfa_match(dfa, state, devname);
+	state = pyr_dfa_null_transition(dfa, state);
 	if (!state)
 		return 2;
 
 	if (type)
-		state = aa_dfa_match(dfa, state, type);
-	state = aa_dfa_null_transition(dfa, state);
+		state = pyr_dfa_match(dfa, state, type);
+	state = pyr_dfa_null_transition(dfa, state);
 	if (!state)
 		return 3;
 
@@ -274,20 +274,20 @@ static int do_match_mnt(struct aa_dfa *dfa, unsigned int start,
 	if (!state)
 		return 4;
 	*perms = compute_mnt_perms(dfa, state);
-	if (perms->allow & AA_MAY_MOUNT)
+	if (perms->allow & PYR_MAY_MOUNT)
 		return 0;
 
 	/* only match data if not binary and the DFA flags data is expected */
-	if (data && !binary && (perms->allow & AA_CONT_MATCH)) {
-		state = aa_dfa_null_transition(dfa, state);
+	if (data && !binary && (perms->allow & PYR_CONT_MATCH)) {
+		state = pyr_dfa_null_transition(dfa, state);
 		if (!state)
 			return 4;
 
-		state = aa_dfa_match(dfa, state, data);
+		state = pyr_dfa_match(dfa, state, data);
 		if (!state)
 			return 5;
 		*perms = compute_mnt_perms(dfa, state);
-		if (perms->allow & AA_MAY_MOUNT)
+		if (perms->allow & PYR_MAY_MOUNT)
 			return 0;
 	}
 
@@ -309,7 +309,7 @@ static int do_match_mnt(struct aa_dfa *dfa, unsigned int start,
  *
  * Returns: 0 on success else error
  */
-static int match_mnt(struct aa_profile *profile, const char *mntpnt,
+static int match_mnt(struct pyr_profile *profile, const char *mntpnt,
 		     const char *devname, const char *type,
 		     unsigned long flags, void *data, bool binary,
 		     struct file_perms *perms, const char **info)
@@ -320,7 +320,7 @@ static int match_mnt(struct aa_profile *profile, const char *mntpnt,
 		return -EACCES;
 
 	pos = do_match_mnt(profile->policy.dfa,
-			   profile->policy.start[AA_CLASS_MOUNT],
+			   profile->policy.start[PYR_CLASS_MOUNT],
 			   mntpnt, devname, type, flags, data, binary, perms);
 	if (pos) {
 		*info = mnt_info_table[pos];
@@ -330,13 +330,13 @@ static int match_mnt(struct aa_profile *profile, const char *mntpnt,
 	return 0;
 }
 
-static int path_flags(struct aa_profile *profile, const struct path *path)
+static int path_flags(struct pyr_profile *profile, const struct path *path)
 {
 	return profile->path_flags |
 		S_ISDIR(path->dentry->d_inode->i_mode) ? PATH_IS_DIR : 0;
 }
 
-int aa_remount(struct aa_profile *profile, const struct path *path,
+int pyr_remount(struct pyr_profile *profile, const struct path *path,
 	       unsigned long flags, void *data)
 {
 	struct file_perms perms = { };
@@ -346,7 +346,7 @@ int aa_remount(struct aa_profile *profile, const struct path *path,
 
 	binary = path->dentry->d_sb->s_type->fs_flags & FS_BINARY_MOUNTDATA;
 
-	error = aa_path_name(path, path_flags(profile, path), &buffer, &name,
+	error = pyr_path_name(path, path_flags(profile, path), &buffer, &name,
 			     &info);
 	if (error)
 		goto audit;
@@ -356,14 +356,14 @@ int aa_remount(struct aa_profile *profile, const struct path *path,
 
 audit:
 	error = audit_mount(profile, GFP_KERNEL, OP_MOUNT, name, NULL, NULL,
-			    NULL, flags, data, AA_MAY_MOUNT, &perms, info,
+			    NULL, flags, data, PYR_MAY_MOUNT, &perms, info,
 			    error);
 	kfree(buffer);
 
 	return error;
 }
 
-int aa_bind_mount(struct aa_profile *profile, const struct path *path,
+int pyr_bind_mount(struct pyr_profile *profile, const struct path *path,
 		  const char *dev_name, unsigned long flags)
 {
 	struct file_perms perms = { };
@@ -377,7 +377,7 @@ int aa_bind_mount(struct aa_profile *profile, const struct path *path,
 
 	flags &= MS_REC | MS_BIND;
 
-	error = aa_path_name(path, path_flags(profile, path), &buffer, &name,
+	error = pyr_path_name(path, path_flags(profile, path), &buffer, &name,
 			     &info);
 	if (error)
 		goto audit;
@@ -386,7 +386,7 @@ int aa_bind_mount(struct aa_profile *profile, const struct path *path,
 	if (error)
 		goto audit;
 
-	error = aa_path_name(&old_path, path_flags(profile, &old_path),
+	error = pyr_path_name(&old_path, path_flags(profile, &old_path),
 			     &old_buffer, &old_name, &info);
 	path_put(&old_path);
 	if (error)
@@ -397,7 +397,7 @@ int aa_bind_mount(struct aa_profile *profile, const struct path *path,
 
 audit:
 	error = audit_mount(profile, GFP_KERNEL, OP_MOUNT, name, old_name,
-			    NULL, NULL, flags, NULL, AA_MAY_MOUNT, &perms,
+			    NULL, NULL, flags, NULL, PYR_MAY_MOUNT, &perms,
 			    info, error);
 	kfree(buffer);
 	kfree(old_buffer);
@@ -405,7 +405,7 @@ audit:
 	return error;
 }
 
-int aa_mount_change_type(struct aa_profile *profile, const struct path *path,
+int pyr_mount_change_type(struct pyr_profile *profile, const struct path *path,
 			 unsigned long flags)
 {
 	struct file_perms perms = { };
@@ -417,7 +417,7 @@ int aa_mount_change_type(struct aa_profile *profile, const struct path *path,
 	flags &= (MS_REC | MS_SILENT | MS_SHARED | MS_PRIVATE | MS_SLAVE |
 		  MS_UNBINDABLE);
 
-	error = aa_path_name(path, path_flags(profile, path), &buffer, &name,
+	error = pyr_path_name(path, path_flags(profile, path), &buffer, &name,
 			     &info);
 	if (error)
 		goto audit;
@@ -427,14 +427,14 @@ int aa_mount_change_type(struct aa_profile *profile, const struct path *path,
 
 audit:
 	error = audit_mount(profile, GFP_KERNEL, OP_MOUNT, name, NULL, NULL,
-			    NULL, flags, NULL, AA_MAY_MOUNT, &perms, info,
+			    NULL, flags, NULL, PYR_MAY_MOUNT, &perms, info,
 			    error);
 	kfree(buffer);
 
 	return error;
 }
 
-int aa_move_mount(struct aa_profile *profile, const struct path *path,
+int pyr_move_mount(struct pyr_profile *profile, const struct path *path,
 		  const char *orig_name)
 {
 	struct file_perms perms = { };
@@ -446,7 +446,7 @@ int aa_move_mount(struct aa_profile *profile, const struct path *path,
 	if (!orig_name || !*orig_name)
 		return -EINVAL;
 
-	error = aa_path_name(path, path_flags(profile, path), &buffer, &name,
+	error = pyr_path_name(path, path_flags(profile, path), &buffer, &name,
 			     &info);
 	if (error)
 		goto audit;
@@ -455,7 +455,7 @@ int aa_move_mount(struct aa_profile *profile, const struct path *path,
 	if (error)
 		goto audit;
 
-	error = aa_path_name(&old_path, path_flags(profile, &old_path),
+	error = pyr_path_name(&old_path, path_flags(profile, &old_path),
 			     &old_buffer, &old_name, &info);
 	path_put(&old_path);
 	if (error)
@@ -466,7 +466,7 @@ int aa_move_mount(struct aa_profile *profile, const struct path *path,
 
 audit:
 	error = audit_mount(profile, GFP_KERNEL, OP_MOUNT, name, old_name,
-			    NULL, NULL, MS_MOVE, NULL, AA_MAY_MOUNT, &perms,
+			    NULL, NULL, MS_MOVE, NULL, PYR_MAY_MOUNT, &perms,
 			    info, error);
 	kfree(buffer);
 	kfree(old_buffer);
@@ -474,7 +474,7 @@ audit:
 	return error;
 }
 
-int aa_new_mount(struct aa_profile *profile, const char *orig_dev_name,
+int pyr_new_mount(struct pyr_profile *profile, const char *orig_dev_name,
 		 const struct path *path, const char *type, unsigned long flags,
 		 void *data)
 {
@@ -507,7 +507,7 @@ int aa_new_mount(struct aa_profile *profile, const char *orig_dev_name,
 			if (error)
 				goto audit;
 
-			error = aa_path_name(&dev_path,
+			error = pyr_path_name(&dev_path,
 					     path_flags(profile, &dev_path),
 					     &dev_buffer, &dev_name, &info);
 			path_put(&dev_path);
@@ -516,7 +516,7 @@ int aa_new_mount(struct aa_profile *profile, const char *orig_dev_name,
 		}
 	}
 
-	error = aa_path_name(path, path_flags(profile, path), &buffer, &name,
+	error = pyr_path_name(path, path_flags(profile, path), &buffer, &name,
 			     &info);
 	if (error)
 		goto audit;
@@ -526,7 +526,7 @@ int aa_new_mount(struct aa_profile *profile, const char *orig_dev_name,
 
 audit:
 	error = audit_mount(profile, GFP_KERNEL, OP_MOUNT, name,  dev_name,
-			    type, NULL, flags, data, AA_MAY_MOUNT, &perms, info,
+			    type, NULL, flags, data, PYR_MAY_MOUNT, &perms, info,
 			    error);
 	kfree(buffer);
 	kfree(dev_buffer);
@@ -536,7 +536,7 @@ out:
 
 }
 
-int aa_umount(struct aa_profile *profile, struct vfsmount *mnt, int flags)
+int pyr_umount(struct pyr_profile *profile, struct vfsmount *mnt, int flags)
 {
 	struct file_perms perms = { };
 	char *buffer = NULL;
@@ -544,66 +544,66 @@ int aa_umount(struct aa_profile *profile, struct vfsmount *mnt, int flags)
 	int error;
 
 	struct path path = { mnt, mnt->mnt_root };
-	error = aa_path_name(&path, path_flags(profile, &path), &buffer, &name,
+	error = pyr_path_name(&path, path_flags(profile, &path), &buffer, &name,
 			     &info);
 	if (error)
 		goto audit;
 
 	if (!error && profile->policy.dfa) {
 		unsigned int state;
-		state = aa_dfa_match(profile->policy.dfa,
-				     profile->policy.start[AA_CLASS_MOUNT],
+		state = pyr_dfa_match(profile->policy.dfa,
+				     profile->policy.start[PYR_CLASS_MOUNT],
 				     name);
 		perms = compute_mnt_perms(profile->policy.dfa, state);
 	}
 
-	if (AA_MAY_UMOUNT & ~perms.allow)
+	if (PYR_MAY_UMOUNT & ~perms.allow)
 		error = -EACCES;
 
 audit:
 	error = audit_mount(profile, GFP_KERNEL, OP_UMOUNT, name, NULL, NULL,
-			    NULL, 0, NULL, AA_MAY_UMOUNT, &perms, info, error);
+			    NULL, 0, NULL, PYR_MAY_UMOUNT, &perms, info, error);
 	kfree(buffer);
 
 	return error;
 }
 
-int aa_pivotroot(struct aa_profile *profile, const struct path *old_path,
+int pyr_pivotroot(struct pyr_profile *profile, const struct path *old_path,
 		 const struct path *new_path)
 {
 	struct file_perms perms = { };
-	struct aa_profile *target = NULL;
+	struct pyr_profile *target = NULL;
 	char *old_buffer = NULL, *new_buffer = NULL;
 	const char *old_name, *new_name = NULL, *info = NULL;
 	int error;
 
-	error = aa_path_name(old_path, path_flags(profile, old_path),
+	error = pyr_path_name(old_path, path_flags(profile, old_path),
 			     &old_buffer, &old_name, &info);
 	if (error)
 		goto audit;
 
-	error = aa_path_name(new_path, path_flags(profile, new_path),
+	error = pyr_path_name(new_path, path_flags(profile, new_path),
 			     &new_buffer, &new_name, &info);
 	if (error)
 		goto audit;
 
 	if (profile->policy.dfa) {
 		unsigned int state;
-		state = aa_dfa_match(profile->policy.dfa,
-				     profile->policy.start[AA_CLASS_MOUNT],
+		state = pyr_dfa_match(profile->policy.dfa,
+				     profile->policy.start[PYR_CLASS_MOUNT],
 				     new_name);
-		state = aa_dfa_null_transition(profile->policy.dfa, state);
-		state = aa_dfa_match(profile->policy.dfa, state, old_name);
+		state = pyr_dfa_null_transition(profile->policy.dfa, state);
+		state = pyr_dfa_match(profile->policy.dfa, state, old_name);
 		perms = compute_mnt_perms(profile->policy.dfa, state);
 	}
 
-	if (AA_MAY_PIVOTROOT & perms.allow) {
-		if ((perms.xindex & AA_X_TYPE_MASK) == AA_X_TABLE) {
-			target = x_table_lookup(profile, perms.xindex);
+	if (PYR_MAY_PIVOTROOT & perms.allow) {
+		if ((perms.xindex & PYR_X_TYPE_MASK) == PYR_X_TABLE) {
+			target = pyr_x_table_lookup(profile, perms.xindex);
 			if (!target)
 				error = -ENOENT;
 			else
-				error = aa_replace_current_profile(target);
+				error = pyr_replace_current_profile(target);
 		}
 	} else
 		error = -EACCES;
@@ -611,8 +611,8 @@ int aa_pivotroot(struct aa_profile *profile, const struct path *old_path,
 audit:
 	error = audit_mount(profile, GFP_KERNEL, OP_PIVOTROOT, new_name,
 			    old_name, NULL, target ? target->base.name : NULL,
-			    0, NULL,  AA_MAY_PIVOTROOT, &perms, info, error);
-	aa_put_profile(target);
+			    0, NULL,  PYR_MAY_PIVOTROOT, &perms, info, error);
+	pyr_put_profile(target);
 	kfree(old_buffer);
 	kfree(new_buffer);
 

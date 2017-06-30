@@ -20,7 +20,7 @@
 #include <linux/err.h>
 #include <linux/kref.h>
 
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 #include "include/match.h"
 
 #define base_idx(X) ((X) & 0xffffff)
@@ -101,7 +101,7 @@ fail:
  *
  * Returns: %0 else error code on failure to verify
  */
-static int verify_dfa(struct aa_dfa *dfa, int flags)
+static int verify_dfa(struct pyr_dfa *dfa, int flags)
 {
 	size_t i, state_count, trans_count;
 	int error = -EPROTO;
@@ -144,7 +144,7 @@ static int verify_dfa(struct aa_dfa *dfa, int flags)
 			if (DEFAULT_TABLE(dfa)[i] >= state_count)
 				goto out;
 			if (base_idx(BASE_TABLE(dfa)[i]) + 255 >= trans_count) {
-				printk(KERN_ERR "AppArmor DFA next/check upper "
+				printk(KERN_ERR "Pyronia DFA next/check upper "
 				       "bounds error\n");
 				goto out;
 			}
@@ -164,12 +164,12 @@ out:
 }
 
 /**
- * dfa_free - free a dfa allocated by aa_dfa_unpack
+ * dfa_free - free a dfa allocated by pyr_dfa_unpack
  * @dfa: the dfa to free  (MAYBE NULL)
  *
  * Requires: reference count to dfa == 0
  */
-static void dfa_free(struct aa_dfa *dfa)
+static void dfa_free(struct pyr_dfa *dfa)
 {
 	if (dfa) {
 		int i;
@@ -183,17 +183,17 @@ static void dfa_free(struct aa_dfa *dfa)
 }
 
 /**
- * aa_dfa_free_kref - free aa_dfa by kref (called by aa_put_dfa)
+ * pyr_dfa_free_kref - free pyr_dfa by kref (called by pyr_put_dfa)
  * @kr: kref callback for freeing of a dfa  (NOT NULL)
  */
-void aa_dfa_free_kref(struct kref *kref)
+void pyr_dfa_free_kref(struct kref *kref)
 {
-	struct aa_dfa *dfa = container_of(kref, struct aa_dfa, count);
+	struct pyr_dfa *dfa = container_of(kref, struct pyr_dfa, count);
 	dfa_free(dfa);
 }
 
 /**
- * aa_dfa_unpack - unpack the binary tables of a serialized dfa
+ * pyr_dfa_unpack - unpack the binary tables of a serialized dfa
  * @blob: aligned serialized stream of data to unpack  (NOT NULL)
  * @size: size of data to unpack
  * @flags: flags controlling what type of accept tables are acceptable
@@ -204,13 +204,13 @@ void aa_dfa_free_kref(struct kref *kref)
  *
  * Returns: an unpacked dfa ready for matching or ERR_PTR on failure
  */
-struct aa_dfa *aa_dfa_unpack(void *blob, size_t size, int flags)
+struct pyr_dfa *pyr_dfa_unpack(void *blob, size_t size, int flags)
 {
 	int hsize;
 	int error = -ENOMEM;
 	char *data = blob;
 	struct table_header *table = NULL;
-	struct aa_dfa *dfa = kzalloc(sizeof(struct aa_dfa), GFP_KERNEL);
+	struct pyr_dfa *dfa = kzalloc(sizeof(struct pyr_dfa), GFP_KERNEL);
 	if (!dfa)
 		goto fail;
 
@@ -286,13 +286,13 @@ fail:
 }
 
 /**
- * aa_dfa_match_len - traverse @dfa to find state @str stops at
+ * pyr_dfa_match_len - traverse @dfa to find state @str stops at
  * @dfa: the dfa to match @str against  (NOT NULL)
  * @start: the state of the dfa to start matching in
  * @str: the string of bytes to match against the dfa  (NOT NULL)
  * @len: length of the string of bytes to match
  *
- * aa_dfa_match_len will match @str against the dfa and return the state it
+ * pyr_dfa_match_len will match @str against the dfa and return the state it
  * finished matching in. The final state can be used to look up the accepting
  * label, or as the start state of a continuing match.
  *
@@ -301,7 +301,7 @@ fail:
  *
  * Returns: final state reached after input is consumed
  */
-unsigned int aa_dfa_match_len(struct aa_dfa *dfa, unsigned int start,
+unsigned int pyr_dfa_match_len(struct pyr_dfa *dfa, unsigned int start,
 			      const char *str, int len)
 {
 	u16 *def = DEFAULT_TABLE(dfa);
@@ -340,18 +340,18 @@ unsigned int aa_dfa_match_len(struct aa_dfa *dfa, unsigned int start,
 }
 
 /**
- * aa_dfa_match - traverse @dfa to find state @str stops at
+ * pyr_dfa_match - traverse @dfa to find state @str stops at
  * @dfa: the dfa to match @str against  (NOT NULL)
  * @start: the state of the dfa to start matching in
  * @str: the null terminated string of bytes to match against the dfa (NOT NULL)
  *
- * aa_dfa_match will match @str against the dfa and return the state it
+ * pyr_dfa_match will match @str against the dfa and return the state it
  * finished matching in. The final state can be used to look up the accepting
  * label, or as the start state of a continuing match.
  *
  * Returns: final state reached after input is consumed
  */
-unsigned int aa_dfa_match(struct aa_dfa *dfa, unsigned int start,
+unsigned int pyr_dfa_match(struct pyr_dfa *dfa, unsigned int start,
 			  const char *str)
 {
 	u16 *def = DEFAULT_TABLE(dfa);
@@ -390,16 +390,16 @@ unsigned int aa_dfa_match(struct aa_dfa *dfa, unsigned int start,
 }
 
 /**
- * aa_dfa_next - step one character to the next state in the dfa
+ * pyr_dfa_next - step one character to the next state in the dfa
  * @dfa: the dfa to tranverse (NOT NULL)
  * @state: the state to start in
  * @c: the input character to transition on
  *
- * aa_dfa_match will step through the dfa by one input character @c
+ * pyr_dfa_match will step through the dfa by one input character @c
  *
  * Returns: state reach after input @c
  */
-unsigned int aa_dfa_next(struct aa_dfa *dfa, unsigned int state,
+unsigned int pyr_dfa_next(struct pyr_dfa *dfa, unsigned int state,
 			  const char c)
 {
 	u16 *def = DEFAULT_TABLE(dfa);

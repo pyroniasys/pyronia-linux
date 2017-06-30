@@ -12,14 +12,14 @@
  * License.
  */
 
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 #include "include/audit.h"
 #include "include/file.h"
 #include "include/match.h"
 #include "include/path.h"
 #include "include/policy.h"
 
-struct file_perms nullperms;
+struct file_perms pyr_nullperms;
 
 
 /**
@@ -33,22 +33,22 @@ static void audit_file_mask(struct audit_buffer *ab, u32 mask)
 
 	char *m = str;
 
-	if (mask & AA_EXEC_MMAP)
+	if (mask & PYR_EXEC_MMAP)
 		*m++ = 'm';
-	if (mask & (MAY_READ | AA_MAY_META_READ))
+	if (mask & (MAY_READ | PYR_MAY_META_READ))
 		*m++ = 'r';
-	if (mask & (MAY_WRITE | AA_MAY_META_WRITE | AA_MAY_CHMOD |
-		    AA_MAY_CHOWN))
+	if (mask & (MAY_WRITE | PYR_MAY_META_WRITE | PYR_MAY_CHMOD |
+		    PYR_MAY_CHOWN))
 		*m++ = 'w';
 	else if (mask & MAY_APPEND)
 		*m++ = 'a';
-	if (mask & AA_MAY_CREATE)
+	if (mask & PYR_MAY_CREATE)
 		*m++ = 'c';
-	if (mask & AA_MAY_DELETE)
+	if (mask & PYR_MAY_DELETE)
 		*m++ = 'd';
-	if (mask & AA_MAY_LINK)
+	if (mask & PYR_MAY_LINK)
 		*m++ = 'l';
-	if (mask & AA_MAY_LOCK)
+	if (mask & PYR_MAY_LOCK)
 		*m++ = 'k';
 	if (mask & MAY_EXEC)
 		*m++ = 'x';
@@ -67,29 +67,29 @@ static void file_audit_cb(struct audit_buffer *ab, void *va)
 	struct common_audit_data *sa = va;
 	kuid_t fsuid = current_fsuid();
 
-	if (sa->aad->fs.request & AA_AUDIT_FILE_MASK) {
+	if (sa->pyrd->fs.request & PYR_AUDIT_FILE_MASK) {
 		audit_log_format(ab, " requested_mask=");
-		audit_file_mask(ab, sa->aad->fs.request);
+		audit_file_mask(ab, sa->pyrd->fs.request);
 	}
-	if (sa->aad->fs.denied & AA_AUDIT_FILE_MASK) {
+	if (sa->pyrd->fs.denied & PYR_AUDIT_FILE_MASK) {
 		audit_log_format(ab, " denied_mask=");
-		audit_file_mask(ab, sa->aad->fs.denied);
+		audit_file_mask(ab, sa->pyrd->fs.denied);
 	}
-	if (sa->aad->fs.request & AA_AUDIT_FILE_MASK) {
+	if (sa->pyrd->fs.request & PYR_AUDIT_FILE_MASK) {
 		audit_log_format(ab, " fsuid=%d",
 				 from_kuid(&init_user_ns, fsuid));
 		audit_log_format(ab, " ouid=%d",
-				 from_kuid(&init_user_ns, sa->aad->fs.ouid));
+				 from_kuid(&init_user_ns, sa->pyrd->fs.ouid));
 	}
 
-	if (sa->aad->fs.target) {
+	if (sa->pyrd->fs.target) {
 		audit_log_format(ab, " target=");
-		audit_log_untrustedstring(ab, sa->aad->fs.target);
+		audit_log_untrustedstring(ab, sa->pyrd->fs.target);
 	}
 }
 
 /**
- * aa_audit_file - handle the auditing of file operations
+ * pyr_audit_file - handle the auditing of file operations
  * @profile: the profile being enforced  (NOT NULL)
  * @perms: the permissions computed for the request (NOT NULL)
  * @gfp: allocation flags
@@ -103,55 +103,55 @@ static void file_audit_cb(struct audit_buffer *ab, void *va)
  *
  * Returns: %0 or error on failure
  */
-int aa_audit_file(struct aa_profile *profile, struct file_perms *perms,
+int pyr_audit_file(struct pyr_profile *profile, struct file_perms *perms,
 		  gfp_t gfp, int op, u32 request, const char *name,
 		  const char *target, kuid_t ouid, const char *info, int error)
 {
-	int type = AUDIT_APPARMOR_AUTO;
+	int type = AUDIT_PYRONIA_AUTO;
 	struct common_audit_data sa;
-	struct apparmor_audit_data aad = {0,};
+	struct pyronia_audit_data pyrd = {0,};
 	sa.type = LSM_AUDIT_DATA_TASK;
 	sa.u.tsk = NULL;
-	sa.aad = &aad;
-	aad.op = op,
-	aad.fs.request = request;
-	aad.name = name;
-	aad.fs.target = target;
-	aad.fs.ouid = ouid;
-	aad.info = info;
-	aad.error = error;
+	sa.pyrd = &pyrd;
+	pyrd.op = op,
+	pyrd.fs.request = request;
+	pyrd.name = name;
+	pyrd.fs.target = target;
+	pyrd.fs.ouid = ouid;
+	pyrd.info = info;
+	pyrd.error = error;
 
-	if (likely(!sa.aad->error)) {
+	if (likely(!sa.pyrd->error)) {
 		u32 mask = perms->audit;
 
 		if (unlikely(AUDIT_MODE(profile) == AUDIT_ALL))
 			mask = 0xffff;
 
 		/* mask off perms that are not being force audited */
-		sa.aad->fs.request &= mask;
+		sa.pyrd->fs.request &= mask;
 
-		if (likely(!sa.aad->fs.request))
+		if (likely(!sa.pyrd->fs.request))
 			return 0;
-		type = AUDIT_APPARMOR_AUDIT;
+		type = AUDIT_PYRONIA_AUDIT;
 	} else {
 		/* only report permissions that were denied */
-		sa.aad->fs.request = sa.aad->fs.request & ~perms->allow;
+		sa.pyrd->fs.request = sa.pyrd->fs.request & ~perms->allow;
 
-		if (sa.aad->fs.request & perms->kill)
-			type = AUDIT_APPARMOR_KILL;
+		if (sa.pyrd->fs.request & perms->kill)
+			type = AUDIT_PYRONIA_KILL;
 
 		/* quiet known rejects, assumes quiet and kill do not overlap */
-		if ((sa.aad->fs.request & perms->quiet) &&
+		if ((sa.pyrd->fs.request & perms->quiet) &&
 		    AUDIT_MODE(profile) != AUDIT_NOQUIET &&
 		    AUDIT_MODE(profile) != AUDIT_ALL)
-			sa.aad->fs.request &= ~perms->quiet;
+			sa.pyrd->fs.request &= ~perms->quiet;
 
-		if (!sa.aad->fs.request)
-			return COMPLAIN_MODE(profile) ? 0 : sa.aad->error;
+		if (!sa.pyrd->fs.request)
+			return COMPLAIN_MODE(profile) ? 0 : sa.pyrd->error;
 	}
 
-	sa.aad->fs.denied = sa.aad->fs.request & ~perms->allow;
-	return aa_audit(type, profile, gfp, &sa, file_audit_cb);
+	sa.pyrd->fs.denied = sa.pyrd->fs.request & ~perms->allow;
+	return pyr_audit(type, profile, gfp, &sa, file_audit_cb);
 }
 
 /**
@@ -164,19 +164,19 @@ static u32 map_old_perms(u32 old)
 {
 	u32 new = old & 0xf;
 	if (old & MAY_READ)
-		new |= AA_MAY_META_READ;
+		new |= PYR_MAY_META_READ;
 	if (old & MAY_WRITE)
-		new |= AA_MAY_META_WRITE | AA_MAY_CREATE | AA_MAY_DELETE |
-			AA_MAY_CHMOD | AA_MAY_CHOWN;
+		new |= PYR_MAY_META_WRITE | PYR_MAY_CREATE | PYR_MAY_DELETE |
+			PYR_MAY_CHMOD | PYR_MAY_CHOWN;
 	if (old & 0x10)
-		new |= AA_MAY_LINK;
+		new |= PYR_MAY_LINK;
 	/* the old mapping lock and link_subset flags where overlaid
 	 * and use was determined by part of a pair that they were in
 	 */
 	if (old & 0x20)
-		new |= AA_MAY_LOCK | AA_LINK_SUBSET;
-	if (old & 0x40)	/* AA_EXEC_MMAP */
-		new |= AA_EXEC_MMAP;
+		new |= PYR_MAY_LOCK | PYR_LINK_SUBSET;
+	if (old & 0x40)	/* PYR_EXEC_MMAP */
+		new |= PYR_EXEC_MMAP;
 
 	return new;
 }
@@ -192,7 +192,7 @@ static u32 map_old_perms(u32 old)
  *
  * Returns: computed permission set
  */
-static struct file_perms compute_perms(struct aa_dfa *dfa, unsigned int state,
+static struct file_perms compute_perms(struct pyr_dfa *dfa, unsigned int state,
 				       struct path_cond *cond)
 {
 	struct file_perms perms;
@@ -215,19 +215,19 @@ static struct file_perms compute_perms(struct aa_dfa *dfa, unsigned int state,
 		perms.quiet = map_old_perms(dfa_other_quiet(dfa, state));
 		perms.xindex = dfa_other_xindex(dfa, state);
 	}
-	perms.allow |= AA_MAY_META_READ;
+	perms.allow |= PYR_MAY_META_READ;
 
 	/* change_profile wasn't determined by ownership in old mapping */
 	if (ACCEPT_TABLE(dfa)[state] & 0x80000000)
-		perms.allow |= AA_MAY_CHANGE_PROFILE;
+		perms.allow |= PYR_MAY_CHANGE_PROFILE;
 	if (ACCEPT_TABLE(dfa)[state] & 0x40000000)
-		perms.allow |= AA_MAY_ONEXEC;
+		perms.allow |= PYR_MAY_ONEXEC;
 
 	return perms;
 }
 
 /**
- * aa_str_perms - find permission that match @name
+ * pyr_str_perms - find permission that match @name
  * @dfa: to match against  (MAYBE NULL)
  * @state: state to start matching in
  * @name: string to match against dfa  (NOT NULL)
@@ -236,17 +236,17 @@ static struct file_perms compute_perms(struct aa_dfa *dfa, unsigned int state,
  *
  * Returns: the final state in @dfa when beginning @start and walking @name
  */
-unsigned int aa_str_perms(struct aa_dfa *dfa, unsigned int start,
+unsigned int pyr_str_perms(struct pyr_dfa *dfa, unsigned int start,
 			  const char *name, struct path_cond *cond,
 			  struct file_perms *perms)
 {
 	unsigned int state;
 	if (!dfa) {
-		*perms = nullperms;
+		*perms = pyr_nullperms;
 		return DFA_NOMATCH;
 	}
 
-	state = aa_dfa_match(dfa, start, name);
+	state = pyr_dfa_match(dfa, start, name);
 	*perms = compute_perms(dfa, state, cond);
 
 	return state;
@@ -266,7 +266,7 @@ static inline bool is_deleted(struct dentry *dentry)
 }
 
 /**
- * aa_path_perm - do permissions check & audit for @path
+ * pyr_path_perm - do permissions check & audit for @path
  * @op: operation being checked
  * @profile: profile being enforced  (NOT NULL)
  * @path: path to check permissions of  (NOT NULL)
@@ -276,7 +276,7 @@ static inline bool is_deleted(struct dentry *dentry)
  *
  * Returns: %0 else error if access denied or other error
  */
-int aa_path_perm(int op, struct aa_profile *profile, const struct path *path,
+int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 		 int flags, u32 request, struct path_cond *cond)
 {
 	char *buffer = NULL;
@@ -285,7 +285,7 @@ int aa_path_perm(int op, struct aa_profile *profile, const struct path *path,
 	int error;
 
 	flags |= profile->path_flags | (S_ISDIR(cond->mode) ? PATH_IS_DIR : 0);
-	error = aa_path_name(path, flags, &buffer, &name, &info);
+	error = pyr_path_name(path, flags, &buffer, &name, &info);
 	if (error) {
 		if (error == -ENOENT && is_deleted(path->dentry)) {
 			/* Access to open files that are deleted are
@@ -296,12 +296,12 @@ int aa_path_perm(int op, struct aa_profile *profile, const struct path *path,
 			perms.allow = request;
 		}
 	} else {
-		aa_str_perms(profile->file.dfa, profile->file.start, name, cond,
+		pyr_str_perms(profile->file.dfa, profile->file.start, name, cond,
 			     &perms);
 		if (request & ~perms.allow)
 			error = -EACCES;
 	}
-	error = aa_audit_file(profile, &perms, GFP_KERNEL, op, request, name,
+	error = pyr_audit_file(profile, &perms, GFP_KERNEL, op, request, name,
 			      NULL, cond->uid, info, error);
 	kfree(buffer);
 
@@ -309,7 +309,7 @@ int aa_path_perm(int op, struct aa_profile *profile, const struct path *path,
 }
 
 /**
- * xindex_is_subset - helper for aa_path_link
+ * xindex_is_subset - helper for pyr_path_link
  * @link: link permission set
  * @target: target permission set
  *
@@ -321,15 +321,15 @@ int aa_path_perm(int op, struct aa_profile *profile, const struct path *path,
  */
 static inline bool xindex_is_subset(u32 link, u32 target)
 {
-	if (((link & ~AA_X_UNSAFE) != (target & ~AA_X_UNSAFE)) ||
-	    ((link & AA_X_UNSAFE) && !(target & AA_X_UNSAFE)))
+	if (((link & ~PYR_X_UNSAFE) != (target & ~PYR_X_UNSAFE)) ||
+	    ((link & PYR_X_UNSAFE) && !(target & PYR_X_UNSAFE)))
 		return 0;
 
 	return 1;
 }
 
 /**
- * aa_path_link - Handle hard link permission check
+ * pyr_path_link - Handle hard link permission check
  * @profile: the profile being enforced  (NOT NULL)
  * @old_dentry: the target dentry  (NOT NULL)
  * @new_dir: directory the new link will be created in  (NOT NULL)
@@ -346,7 +346,7 @@ static inline bool xindex_is_subset(u32 link, u32 target)
  *
  * Returns: %0 if allowed else error
  */
-int aa_path_link(struct aa_profile *profile, struct dentry *old_dentry,
+int pyr_path_link(struct pyr_profile *profile, struct dentry *old_dentry,
 		 const struct path *new_dir, struct dentry *new_dentry)
 {
 	struct path link = { new_dir->mnt, new_dentry };
@@ -358,35 +358,35 @@ int aa_path_link(struct aa_profile *profile, struct dentry *old_dentry,
 	char *buffer = NULL, *buffer2 = NULL;
 	const char *lname, *tname = NULL, *info = NULL;
 	struct file_perms lperms, perms;
-	u32 request = AA_MAY_LINK;
+	u32 request = PYR_MAY_LINK;
 	unsigned int state;
 	int error;
 
-	lperms = nullperms;
+	lperms = pyr_nullperms;
 
 	/* buffer freed below, lname is pointer in buffer */
-	error = aa_path_name(&link, profile->path_flags, &buffer, &lname,
+	error = pyr_path_name(&link, profile->path_flags, &buffer, &lname,
 			     &info);
 	if (error)
 		goto audit;
 
 	/* buffer2 freed below, tname is pointer in buffer2 */
-	error = aa_path_name(&target, profile->path_flags, &buffer2, &tname,
+	error = pyr_path_name(&target, profile->path_flags, &buffer2, &tname,
 			     &info);
 	if (error)
 		goto audit;
 
 	error = -EACCES;
-	/* aa_str_perms - handles the case of the dfa being NULL */
-	state = aa_str_perms(profile->file.dfa, profile->file.start, lname,
+	/* pyr_str_perms - handles the case of the dfa being NULL */
+	state = pyr_str_perms(profile->file.dfa, profile->file.start, lname,
 			     &cond, &lperms);
 
-	if (!(lperms.allow & AA_MAY_LINK))
+	if (!(lperms.allow & PYR_MAY_LINK))
 		goto audit;
 
 	/* test to see if target can be paired with link */
-	state = aa_dfa_null_transition(profile->file.dfa, state);
-	aa_str_perms(profile->file.dfa, state, tname, &cond, &perms);
+	state = pyr_dfa_null_transition(profile->file.dfa, state);
+	pyr_str_perms(profile->file.dfa, state, tname, &cond, &perms);
 
 	/* force audit/quiet masks for link are stored in the second entry
 	 * in the link pair.
@@ -395,26 +395,26 @@ int aa_path_link(struct aa_profile *profile, struct dentry *old_dentry,
 	lperms.quiet = perms.quiet;
 	lperms.kill = perms.kill;
 
-	if (!(perms.allow & AA_MAY_LINK)) {
+	if (!(perms.allow & PYR_MAY_LINK)) {
 		info = "target restricted";
 		goto audit;
 	}
 
 	/* done if link subset test is not required */
-	if (!(perms.allow & AA_LINK_SUBSET))
+	if (!(perms.allow & PYR_LINK_SUBSET))
 		goto done_tests;
 
 	/* Do link perm subset test requiring allowed permission on link are a
 	 * subset of the allowed permissions on target.
 	 */
-	aa_str_perms(profile->file.dfa, profile->file.start, tname, &cond,
+	pyr_str_perms(profile->file.dfa, profile->file.start, tname, &cond,
 		     &perms);
 
-	/* AA_MAY_LINK is not considered in the subset test */
-	request = lperms.allow & ~AA_MAY_LINK;
-	lperms.allow &= perms.allow | AA_MAY_LINK;
+	/* PYR_MAY_LINK is not considered in the subset test */
+	request = lperms.allow & ~PYR_MAY_LINK;
+	lperms.allow &= perms.allow | PYR_MAY_LINK;
 
-	request |= AA_AUDIT_FILE_MASK & (lperms.allow & ~perms.allow);
+	request |= PYR_AUDIT_FILE_MASK & (lperms.allow & ~perms.allow);
 	if (request & ~lperms.allow) {
 		goto audit;
 	} else if ((lperms.allow & MAY_EXEC) &&
@@ -429,7 +429,7 @@ done_tests:
 	error = 0;
 
 audit:
-	error = aa_audit_file(profile, &lperms, GFP_KERNEL, OP_LINK, request,
+	error = pyr_audit_file(profile, &lperms, GFP_KERNEL, OP_LINK, request,
 			      lname, tname, cond.uid, info, error);
 	kfree(buffer);
 	kfree(buffer2);
@@ -438,7 +438,7 @@ audit:
 }
 
 /**
- * aa_file_perm - do permission revalidation check & audit for @file
+ * pyr_file_perm - do permission revalidation check & audit for @file
  * @op: operation being checked
  * @profile: profile being enforced   (NOT NULL)
  * @file: file to revalidate access permissions on  (NOT NULL)
@@ -446,7 +446,7 @@ audit:
  *
  * Returns: %0 if access allowed else error
  */
-int aa_file_perm(int op, struct aa_profile *profile, struct file *file,
+int pyr_file_perm(int op, struct pyr_profile *profile, struct file *file,
 		 u32 request)
 {
 	struct path_cond cond = {
@@ -454,6 +454,6 @@ int aa_file_perm(int op, struct aa_profile *profile, struct file *file,
 		.mode = file_inode(file)->i_mode
 	};
 
-	return aa_path_perm(op, profile, &file->f_path, PATH_DELEGATE_DELETED,
+	return pyr_path_perm(op, profile, &file->f_path, PATH_DELEGATE_DELETED,
 			    request, &cond);
 }

@@ -2,10 +2,10 @@
 #
 obj-$(CONFIG_SECURITY_PYRONIA) += pyronia.o
 
-apparmor-y := apparmorfs.o audit.o capability.o context.o ipc.o lib.o match.o \
+pyronia-y := pyroniafs.o audit.o capability.o context.o ipc.o lib.o match.o \
               path.o domain.o policy.o policy_unpack.o procattr.o lsm.o \
               resource.o sid.o file.o net.o mount.o
-apparmor-$(CONFIG_SECURITY_PYRONIA_HASH) += crypto.o
+pyronia-$(CONFIG_SECURITY_PYRONIA_HASH) += crypto.o
 
 clean-files := capability_names.h rlim_names.h net_names.h
 
@@ -20,7 +20,7 @@ cmd_make-caps = echo "static const char *const capability_names[] = {" > $@ ;\
 	sed $< >>$@ -r -n -e '/CAP_FS_MASK/d' \
 	-e 's/^\#define[ \t]+CAP_([A-Z0-9_]+)[ \t]+([0-9]+)/[\2] = "\L\1",/p';\
 	echo "};" >> $@ ;\
-	echo -n '\#define AA_FS_CAPS_MASK "' >> $@ ;\
+	echo -n '\#define PYR_FS_CAPS_MASK "' >> $@ ;\
 	sed $< -r -n -e '/CAP_FS_MASK/d' \
 	    -e 's/^\#define[ \t]+CAP_([A-Z0-9_]+)[ \t]+([0-9]+)/\L\1/p' | \
 	     tr '\n' ' ' | sed -e 's/ $$/"\n/' >> $@
@@ -43,7 +43,7 @@ cmd_make-af = echo "static const char *address_family_names[] = {" > $@ ;\
 	sed $< >>$@ -r -n -e "/AF_MAX/d" -e "/AF_LOCAL/d" -e \
 	 's/^\#define[ \t]+AF_([A-Z0-9_]+)[ \t]+([0-9]+)(.*)/[\2] = "\L\1",/p';\
 	echo "};" >> $@ ;\
-	echo -n '\#define AA_FS_AF_MASK "' >> $@ ;\
+	echo -n '\#define PYR_FS_AF_MASK "' >> $@ ;\
 	sed -r -n 's/^\#define[ \t]+AF_([A-Z0-9_]+)[ \t]+([0-9]+)(.*)/\L\1/p'\
 	 $< | tr '\n' ' ' | sed -e 's/ $$/"\n/' >> $@
 
@@ -88,7 +88,7 @@ cmd_make-rlim = echo "static const char *const rlim_names[RLIM_NLIMITS] = {" \
 	echo "static const int rlim_map[RLIM_NLIMITS] = {" >> $@ ;\
 	sed -r -n "s/^\# ?define[ \t]+(RLIMIT_[A-Z0-9_]+).*/\1,/p" $< >> $@ ;\
 	echo "};" >> $@ ; \
-	echo -n '\#define AA_FS_RLIMIT_MASK "' >> $@ ;\
+	echo -n '\#define PYR_FS_RLIMIT_MASK "' >> $@ ;\
 	sed -r -n 's/^\# ?define[ \t]+RLIMIT_([A-Z0-9_]+).*/\L\1/p' $< | \
 	    tr '\n' ' ' | sed -e 's/ $$/"\n/' >> $@
 

@@ -12,7 +12,7 @@
  * License.
  */
 
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 #include "include/context.h"
 #include "include/policy.h"
 #include "include/domain.h"
@@ -20,7 +20,7 @@
 
 
 /**
- * aa_getprocattr - Return the profile information for @profile
+ * pyr_getprocattr - Return the profile information for @profile
  * @profile: the profile to print profile info about  (NOT NULL)
  * @string: Returns - string containing the profile info (NOT NULL)
  *
@@ -33,20 +33,20 @@
  *
  * Returns: size of string placed in @string else error code on failure
  */
-int aa_getprocattr(struct aa_profile *profile, char **string)
+int pyr_getprocattr(struct pyr_profile *profile, char **string)
 {
 	char *str;
 	int len = 0, mode_len = 0, ns_len = 0, name_len;
-	const char *mode_str = aa_profile_mode_names[profile->mode];
+	const char *mode_str = pyr_profile_mode_names[profile->mode];
 	const char *ns_name = NULL;
-	struct aa_namespace *ns = profile->ns;
-	struct aa_namespace *current_ns = __aa_current_profile()->ns;
+	struct pyr_namespace *ns = profile->ns;
+	struct pyr_namespace *current_ns = __pyr_current_profile()->ns;
 	char *s;
 
-	if (!aa_ns_visible(current_ns, ns))
+	if (!pyr_ns_visible(current_ns, ns))
 		return -EACCES;
 
-	ns_name = aa_ns_name(current_ns, ns);
+	ns_name = pyr_ns_name(current_ns, ns);
 	ns_len = strlen(ns_name);
 
 	/* if the visible ns_name is > 0 increase size for : :// seperator */
@@ -93,7 +93,7 @@ static char *split_token_from_name(int op, char *args, u64 * token)
 
 	*token = simple_strtoull(args, &name, 16);
 	if ((name == args) || *name != '^') {
-		AA_ERROR("%s: Invalid input '%s'", op_table[op], args);
+		PYR_ERROR("%s: Invalid input '%s'", pyr_op_table[op], args);
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -104,14 +104,14 @@ static char *split_token_from_name(int op, char *args, u64 * token)
 }
 
 /**
- * aa_setprocattr_chagnehat - handle procattr interface to change_hat
+ * pyr_setprocattr_chagnehat - handle procattr interface to change_hat
  * @args: args received from writing to /proc/<pid>/attr/current (NOT NULL)
  * @size: size of the args
  * @test: true if this is a test of change_hat permissions
  *
  * Returns: %0 or error code if change_hat fails
  */
-int aa_setprocattr_changehat(char *args, size_t size, int test)
+int pyr_setprocattr_changehat(char *args, size_t size, int test)
 {
 	char *hat;
 	u64 token;
@@ -123,7 +123,7 @@ int aa_setprocattr_changehat(char *args, size_t size, int test)
 		return PTR_ERR(hat);
 
 	if (!hat && !token) {
-		AA_ERROR("change_hat: Invalid input, NULL hat and NULL magic");
+		PYR_ERROR("change_hat: Invalid input, NULL hat and NULL magic");
 		return -EINVAL;
 	}
 
@@ -142,24 +142,24 @@ int aa_setprocattr_changehat(char *args, size_t size, int test)
 		}
 	}
 
-	AA_DEBUG("%s: Magic 0x%llx Hat '%s'\n",
+	PYR_DEBUG("%s: Magic 0x%llx Hat '%s'\n",
 		 __func__, token, hat ? hat : NULL);
 
-	return aa_change_hat(hats, count, token, test);
+	return pyr_change_hat(hats, count, token, test);
 }
 
 /**
- * aa_setprocattr_changeprofile - handle procattr interface to changeprofile
+ * pyr_setprocattr_changeprofile - handle procattr interface to changeprofile
  * @fqname: args received from writting to /proc/<pid>/attr/current (NOT NULL)
  * @onexec: true if change_profile should be delayed until exec
  * @test: true if this is a test of change_profile permissions
  *
  * Returns: %0 or error code if change_profile fails
  */
-int aa_setprocattr_changeprofile(char *fqname, bool onexec, int test)
+int pyr_setprocattr_changeprofile(char *fqname, bool onexec, int test)
 {
 	char *name, *ns_name;
 
-	name = aa_split_fqname(fqname, &ns_name);
-	return aa_change_profile(ns_name, name, onexec, test);
+	name = pyr_split_fqname(fqname, &ns_name);
+	return pyr_change_profile(ns_name, name, onexec, test);
 }

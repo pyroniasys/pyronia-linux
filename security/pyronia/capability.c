@@ -16,7 +16,7 @@
 #include <linux/errno.h>
 #include <linux/gfp.h>
 
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 #include "include/capability.h"
 #include "include/context.h"
 #include "include/policy.h"
@@ -27,13 +27,13 @@
  */
 #include "capability_names.h"
 
-struct aa_fs_entry aa_fs_entry_caps[] = {
-	AA_FS_FILE_STRING("mask", AA_FS_CAPS_MASK),
+struct pyr_fs_entry pyr_fs_entry_caps[] = {
+	PYR_FS_FILE_STRING("mask", PYR_FS_CAPS_MASK),
 	{ }
 };
 
 struct audit_cache {
-	struct aa_profile *profile;
+	struct pyr_profile *profile;
 	kernel_cap_t caps;
 };
 
@@ -62,27 +62,27 @@ static void audit_cb(struct audit_buffer *ab, void *va)
  *
  * Returns: 0 or sa->error on success,  error code on failure
  */
-static int audit_caps(struct aa_profile *profile, int cap, int error)
+static int audit_caps(struct pyr_profile *profile, int cap, int error)
 {
 	struct audit_cache *ent;
-	int type = AUDIT_APPARMOR_AUTO;
+	int type = AUDIT_PYRONIA_AUTO;
 	struct common_audit_data sa;
-	struct apparmor_audit_data aad = {0,};
+	struct pyronia_audit_data pyrd = {0,};
 	sa.type = LSM_AUDIT_DATA_CAP;
-	sa.aad = &aad;
+	sa.pyrd = &pyrd;
 	sa.u.cap = cap;
-	sa.aad->op = OP_CAPABLE;
-	sa.aad->error = error;
+	sa.pyrd->op = OP_CAPABLE;
+	sa.pyrd->error = error;
 
 	if (likely(!error)) {
 		/* test if auditing is being forced */
 		if (likely((AUDIT_MODE(profile) != AUDIT_ALL) &&
 			   !cap_raised(profile->caps.audit, cap)))
 			return 0;
-		type = AUDIT_APPARMOR_AUDIT;
+		type = AUDIT_PYRONIA_AUDIT;
 	} else if (KILL_MODE(profile) ||
 		   cap_raised(profile->caps.kill, cap)) {
-		type = AUDIT_APPARMOR_KILL;
+		type = AUDIT_PYRONIA_KILL;
 	} else if (cap_raised(profile->caps.quiet, cap) &&
 		   AUDIT_MODE(profile) != AUDIT_NOQUIET &&
 		   AUDIT_MODE(profile) != AUDIT_ALL) {
@@ -98,13 +98,13 @@ static int audit_caps(struct aa_profile *profile, int cap, int error)
 			return complain_error(error);
 		return error;
 	} else {
-		aa_put_profile(ent->profile);
-		ent->profile = aa_get_profile(profile);
+		pyr_put_profile(ent->profile);
+		ent->profile = pyr_get_profile(profile);
 		cap_raise(ent->caps, cap);
 	}
 	put_cpu_var(audit_cache);
 
-	return aa_audit(type, profile, GFP_ATOMIC, &sa, audit_cb);
+	return pyr_audit(type, profile, GFP_ATOMIC, &sa, audit_cb);
 }
 
 /**
@@ -114,13 +114,13 @@ static int audit_caps(struct aa_profile *profile, int cap, int error)
  *
  * Returns: 0 if allowed else -EPERM
  */
-static int profile_capable(struct aa_profile *profile, int cap)
+static int profile_capable(struct pyr_profile *profile, int cap)
 {
 	return cap_raised(profile->caps.allow, cap) ? 0 : -EPERM;
 }
 
 /**
- * aa_capable - test permission to use capability
+ * pyr_capable - test permission to use capability
  * @profile: profile being tested against (NOT NULL)
  * @cap: capability to be tested
  * @audit: whether an audit record should be generated
@@ -129,7 +129,7 @@ static int profile_capable(struct aa_profile *profile, int cap)
  *
  * Returns: 0 on success, or else an error code.
  */
-int aa_capable(struct aa_profile *profile, int cap, int audit)
+int pyr_capable(struct pyr_profile *profile, int cap, int audit)
 {
 	int error = profile_capable(profile, cap);
 

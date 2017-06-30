@@ -87,6 +87,9 @@ struct common_audit_data {
 #ifdef CONFIG_SECURITY_APPARMOR
 		struct apparmor_audit_data *apparmor_audit_data;
 #endif
+#ifdef CONFIG_SECURITY_PYRONIA
+		struct pyronia_audit_data *pyronia_audit_data;
+#endif
 	}; /* per LSM data pointer union */
 };
 

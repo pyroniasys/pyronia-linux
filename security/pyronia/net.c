@@ -12,7 +12,7 @@
  * License.
  */
 
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 #include "include/audit.h"
 #include "include/context.h"
 #include "include/net.h"
@@ -20,8 +20,8 @@
 
 #include "net_names.h"
 
-struct aa_fs_entry aa_fs_entry_network[] = {
-	AA_FS_FILE_STRING("af_mask", AA_FS_AF_MASK),
+struct pyr_fs_entry pyr_fs_entry_network[] = {
+	PYR_FS_FILE_STRING("af_mask", PYR_FS_AF_MASK),
 	{ }
 };
 
@@ -37,12 +37,12 @@ static void audit_cb(struct audit_buffer *ab, void *va)
 		audit_log_format(ab, "\"unknown(%d)\"", sa->u.net->family);
 	}
 	audit_log_format(ab, " sock_type=");
-	if (sock_type_names[sa->aad->net.type]) {
-		audit_log_string(ab, sock_type_names[sa->aad->net.type]);
+	if (sock_type_names[sa->pyrd->net.type]) {
+		audit_log_string(ab, sock_type_names[sa->pyrd->net.type]);
 	} else {
-		audit_log_format(ab, "\"unknown(%d)\"", sa->aad->net.type);
+		audit_log_format(ab, "\"unknown(%d)\"", sa->pyrd->net.type);
 	}
-	audit_log_format(ab, " protocol=%d", sa->aad->net.protocol);
+	audit_log_format(ab, " protocol=%d", sa->pyrd->net.protocol);
 }
 
 /**
@@ -57,12 +57,12 @@ static void audit_cb(struct audit_buffer *ab, void *va)
  *
  * Returns: %0 or sa->error else other errorcode on failure
  */
-static int audit_net(struct aa_profile *profile, int op, u16 family, int type,
+static int audit_net(struct pyr_profile *profile, int op, u16 family, int type,
 		     int protocol, struct sock *sk, int error)
 {
-	int audit_type = AUDIT_APPARMOR_AUTO;
+	int audit_type = AUDIT_PYRONIA_AUTO;
 	struct common_audit_data sa;
-	struct apparmor_audit_data aad = { };
+	struct pyronia_audit_data pyrd = { };
 	struct lsm_network_audit net = { };
 	if (sk) {
 		sa.type = LSM_AUDIT_DATA_NET;
@@ -70,40 +70,40 @@ static int audit_net(struct aa_profile *profile, int op, u16 family, int type,
 		sa.type = LSM_AUDIT_DATA_NONE;
 	}
 	/* todo fill in socket addr info */
-	sa.aad = &aad;
+	sa.pyrd = &pyrd;
 	sa.u.net = &net;
-	sa.aad->op = op,
+	sa.pyrd->op = op,
 	sa.u.net->family = family;
 	sa.u.net->sk = sk;
-	sa.aad->net.type = type;
-	sa.aad->net.protocol = protocol;
-	sa.aad->error = error;
+	sa.pyrd->net.type = type;
+	sa.pyrd->net.protocol = protocol;
+	sa.pyrd->error = error;
 
-	if (likely(!sa.aad->error)) {
+	if (likely(!sa.pyrd->error)) {
 		u16 audit_mask = profile->net.audit[sa.u.net->family];
 		if (likely((AUDIT_MODE(profile) != AUDIT_ALL) &&
-			   !(1 << sa.aad->net.type & audit_mask)))
+			   !(1 << sa.pyrd->net.type & audit_mask)))
 			return 0;
-		audit_type = AUDIT_APPARMOR_AUDIT;
+		audit_type = AUDIT_PYRONIA_AUDIT;
 	} else {
 		u16 quiet_mask = profile->net.quiet[sa.u.net->family];
 		u16 kill_mask = 0;
-		u16 denied = (1 << sa.aad->net.type);
+		u16 denied = (1 << sa.pyrd->net.type);
 
 		if (denied & kill_mask)
-			audit_type = AUDIT_APPARMOR_KILL;
+			audit_type = AUDIT_PYRONIA_KILL;
 
 		if ((denied & quiet_mask) &&
 		    AUDIT_MODE(profile) != AUDIT_NOQUIET &&
 		    AUDIT_MODE(profile) != AUDIT_ALL)
-			return COMPLAIN_MODE(profile) ? 0 : sa.aad->error;
+			return COMPLAIN_MODE(profile) ? 0 : sa.pyrd->error;
 	}
 
-	return aa_audit(audit_type, profile, GFP_KERNEL, &sa, audit_cb);
+	return pyr_audit(audit_type, profile, GFP_KERNEL, &sa, audit_cb);
 }
 
 /**
- * aa_net_perm - very course network access check
+ * pyr_net_perm - very course network access check
  * @op: operation being checked
  * @profile: profile being enforced  (NOT NULL)
  * @family: network family
@@ -112,7 +112,7 @@ static int audit_net(struct aa_profile *profile, int op, u16 family, int type,
  *
  * Returns: %0 else error if permission denied
  */
-int aa_net_perm(int op, struct aa_profile *profile, u16 family, int type,
+int pyr_net_perm(int op, struct pyr_profile *profile, u16 family, int type,
 		int protocol, struct sock *sk)
 {
 	u16 family_mask;
@@ -136,26 +136,26 @@ int aa_net_perm(int op, struct aa_profile *profile, u16 family, int type,
 }
 
 /**
- * aa_revalidate_sk - Revalidate access to a sock
+ * pyr_revalidate_sk - Revalidate access to a sock
  * @op: operation being checked
  * @sk: sock being revalidated  (NOT NULL)
  *
  * Returns: %0 else error if permission denied
  */
-int aa_revalidate_sk(int op, struct sock *sk)
+int pyr_revalidate_sk(int op, struct sock *sk)
 {
-	struct aa_profile *profile;
+	struct pyr_profile *profile;
 	int error = 0;
 
-	/* aa_revalidate_sk should not be called from interrupt context
+	/* pyr_revalidate_sk should not be called from interrupt context
 	 * don't mediate these calls as they are not task related
 	 */
 	if (in_interrupt())
 		return 0;
 
-	profile = __aa_current_profile();
+	profile = __pyr_current_profile();
 	if (!unconfined(profile))
-		error = aa_net_perm(op, profile, sk->sk_family, sk->sk_type,
+		error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
 				    sk->sk_protocol, sk);
 
 	return error;

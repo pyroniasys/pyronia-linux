@@ -12,17 +12,17 @@
  * License.
  */
 
-#ifndef __AA_IPC_H
-#define __AA_IPC_H
+#ifndef __PYR_IPC_H
+#define __PYR_IPC_H
 
 #include <linux/sched.h>
 
-struct aa_profile;
+struct pyr_profile;
 
-int aa_may_ptrace(struct aa_profile *tracer, struct aa_profile *tracee,
+int pyr_may_ptrace(struct pyr_profile *tracer, struct pyr_profile *tracee,
 		  unsigned int mode);
 
-int aa_ptrace(struct task_struct *tracer, struct task_struct *tracee,
+int pyr_ptrace(struct task_struct *tracer, struct task_struct *tracee,
 	      unsigned int mode);
 
-#endif /* __AA_IPC_H */
+#endif /* __PYR_IPC_H */

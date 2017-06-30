@@ -12,8 +12,8 @@
  * License.
  */
 
-#ifndef __AA_MATCH_H
-#define __AA_MATCH_H
+#ifndef __PYR_MATCH_H
+#define __PYR_MATCH_H
 
 #include <linux/kref.h>
 
@@ -94,7 +94,7 @@ struct table_header {
 #define ACCEPT_TABLE(DFA) ((u32 *)((DFA)->tables[YYTD_ID_ACCEPT]->td_data))
 #define ACCEPT_TABLE2(DFA) ((u32 *)((DFA)->tables[YYTD_ID_ACCEPT2]->td_data))
 
-struct aa_dfa {
+struct pyr_dfa {
 	struct kref count;
 	u16 flags;
 	struct table_header *tables[YYTD_ID_TSIZE];
@@ -117,26 +117,26 @@ static inline size_t table_size(size_t len, size_t el_size)
 	return ALIGN(sizeof(struct table_header) + len * el_size, 8);
 }
 
-struct aa_dfa *aa_dfa_unpack(void *blob, size_t size, int flags);
-unsigned int aa_dfa_match_len(struct aa_dfa *dfa, unsigned int start,
+struct pyr_dfa *pyr_dfa_unpack(void *blob, size_t size, int flags);
+unsigned int pyr_dfa_match_len(struct pyr_dfa *dfa, unsigned int start,
 			      const char *str, int len);
-unsigned int aa_dfa_match(struct aa_dfa *dfa, unsigned int start,
+unsigned int pyr_dfa_match(struct pyr_dfa *dfa, unsigned int start,
 			  const char *str);
-unsigned int aa_dfa_next(struct aa_dfa *dfa, unsigned int state,
+unsigned int pyr_dfa_next(struct pyr_dfa *dfa, unsigned int state,
 			 const char c);
 
-void aa_dfa_free_kref(struct kref *kref);
+void pyr_dfa_free_kref(struct kref *kref);
 
 /**
- * aa_put_dfa - put a dfa refcount
+ * pyr_put_dfa - put a dfa refcount
  * @dfa: dfa to put refcount   (MAYBE NULL)
  *
  * Requires: if @dfa != NULL that a valid refcount be held
  */
-static inline void aa_put_dfa(struct aa_dfa *dfa)
+static inline void pyr_put_dfa(struct pyr_dfa *dfa)
 {
 	if (dfa)
-		kref_put(&dfa->count, aa_dfa_free_kref);
+		kref_put(&dfa->count, pyr_dfa_free_kref);
 }
 
-#endif /* __AA_MATCH_H */
+#endif /* __PYR_MATCH_H */

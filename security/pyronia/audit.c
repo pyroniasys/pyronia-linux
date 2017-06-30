@@ -15,11 +15,11 @@
 #include <linux/audit.h>
 #include <linux/socket.h>
 
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 #include "include/audit.h"
 #include "include/policy.h"
 
-const char *const op_table[] = {
+const char *const pyr_op_table[] = {
 	"null",
 
 	"sysctl",
@@ -77,7 +77,7 @@ const char *const op_table[] = {
 	"profile_remove"
 };
 
-const char *const audit_mode_names[] = {
+const char *const pyr_audit_mode_names[] = {
 	"normal",
 	"quiet_denied",
 	"quiet",
@@ -85,7 +85,7 @@ const char *const audit_mode_names[] = {
 	"all"
 };
 
-static const char *const aa_audit_type[] = {
+static const char *const pyr_audit_type[] = {
 	"AUDIT",
 	"ALLOWED",
 	"DENIED",
@@ -116,26 +116,26 @@ static void audit_pre(struct audit_buffer *ab, void *ca)
 {
 	struct common_audit_data *sa = ca;
 
-	if (aa_g_audit_header) {
-		audit_log_format(ab, "apparmor=");
-		audit_log_string(ab, aa_audit_type[sa->aad->type]);
+	if (pyr_g_audit_header) {
+		audit_log_format(ab, "pyronia=");
+		audit_log_string(ab, pyr_audit_type[sa->pyrd->type]);
 	}
 
-	if (sa->aad->op) {
+	if (sa->pyrd->op) {
 		audit_log_format(ab, " operation=");
-		audit_log_string(ab, op_table[sa->aad->op]);
+		audit_log_string(ab, pyr_op_table[sa->pyrd->op]);
 	}
 
-	if (sa->aad->info) {
+	if (sa->pyrd->info) {
 		audit_log_format(ab, " info=");
-		audit_log_string(ab, sa->aad->info);
-		if (sa->aad->error)
-			audit_log_format(ab, " error=%d", sa->aad->error);
+		audit_log_string(ab, sa->pyrd->info);
+		if (sa->pyrd->error)
+			audit_log_format(ab, " error=%d", sa->pyrd->error);
 	}
 
-	if (sa->aad->profile) {
-		struct aa_profile *profile = sa->aad->profile;
-		if (profile->ns != root_ns) {
+	if (sa->pyrd->profile) {
+		struct pyr_profile *profile = sa->pyrd->profile;
+		if (profile->ns != pyr_root_ns) {
 			audit_log_format(ab, " namespace=");
 			audit_log_untrustedstring(ab, profile->ns->base.hname);
 		}
@@ -143,26 +143,26 @@ static void audit_pre(struct audit_buffer *ab, void *ca)
 		audit_log_untrustedstring(ab, profile->base.hname);
 	}
 
-	if (sa->aad->name) {
+	if (sa->pyrd->name) {
 		audit_log_format(ab, " name=");
-		audit_log_untrustedstring(ab, sa->aad->name);
+		audit_log_untrustedstring(ab, sa->pyrd->name);
 	}
 }
 
 /**
- * aa_audit_msg - Log a message to the audit subsystem
+ * pyr_audit_msg - Log a message to the audit subsystem
  * @sa: audit event structure (NOT NULL)
  * @cb: optional callback fn for type specific fields (MAYBE NULL)
  */
-void aa_audit_msg(int type, struct common_audit_data *sa,
+void pyr_audit_msg(int type, struct common_audit_data *sa,
 		  void (*cb) (struct audit_buffer *, void *))
 {
-	sa->aad->type = type;
+	sa->pyrd->type = type;
 	common_lsm_audit(sa, audit_pre, cb);
 }
 
 /**
- * aa_audit - Log a profile based audit event to the audit subsystem
+ * pyr_audit - Log a profile based audit event to the audit subsystem
  * @type: audit type for the message
  * @profile: profile to check against (NOT NULL)
  * @gfp: allocation flags to use
@@ -173,42 +173,42 @@ void aa_audit_msg(int type, struct common_audit_data *sa,
  *
  * Returns: error on failure
  */
-int aa_audit(int type, struct aa_profile *profile, gfp_t gfp,
+int pyr_audit(int type, struct pyr_profile *profile, gfp_t gfp,
 	     struct common_audit_data *sa,
 	     void (*cb) (struct audit_buffer *, void *))
 {
 	BUG_ON(!profile);
 
-	if (type == AUDIT_APPARMOR_AUTO) {
-		if (likely(!sa->aad->error)) {
+	if (type == AUDIT_PYRONIA_AUTO) {
+		if (likely(!sa->pyrd->error)) {
 			if (AUDIT_MODE(profile) != AUDIT_ALL)
 				return 0;
-			type = AUDIT_APPARMOR_AUDIT;
+			type = AUDIT_PYRONIA_AUDIT;
 		} else if (COMPLAIN_MODE(profile))
-			type = AUDIT_APPARMOR_ALLOWED;
+			type = AUDIT_PYRONIA_ALLOWED;
 		else
-			type = AUDIT_APPARMOR_DENIED;
+			type = AUDIT_PYRONIA_DENIED;
 	}
 	if (AUDIT_MODE(profile) == AUDIT_QUIET ||
-	    (type == AUDIT_APPARMOR_DENIED &&
+	    (type == AUDIT_PYRONIA_DENIED &&
 	     AUDIT_MODE(profile) == AUDIT_QUIET))
-		return sa->aad->error;
+		return sa->pyrd->error;
 
-	if (KILL_MODE(profile) && type == AUDIT_APPARMOR_DENIED)
-		type = AUDIT_APPARMOR_KILL;
+	if (KILL_MODE(profile) && type == AUDIT_PYRONIA_DENIED)
+		type = AUDIT_PYRONIA_KILL;
 
 	if (!unconfined(profile))
-		sa->aad->profile = profile;
+		sa->pyrd->profile = profile;
 
-	aa_audit_msg(type, sa, cb);
+	pyr_audit_msg(type, sa, cb);
 
-	if (sa->aad->type == AUDIT_APPARMOR_KILL)
+	if (sa->pyrd->type == AUDIT_PYRONIA_KILL)
 		(void)send_sig_info(SIGKILL, NULL,
 			sa->type == LSM_AUDIT_DATA_TASK && sa->u.tsk ?
 				    sa->u.tsk : current);
 
-	if (sa->aad->type == AUDIT_APPARMOR_ALLOWED)
-		return complain_error(sa->aad->error);
+	if (sa->pyrd->type == AUDIT_PYRONIA_ALLOWED)
+		return complain_error(sa->pyrd->error);
 
-	return sa->aad->error;
+	return sa->pyrd->error;
 }

@@ -17,39 +17,39 @@
 
 #include <crypto/hash.h>
 
-#include "include/apparmor.h"
+#include "include/pyronia.h"
 #include "include/crypto.h"
 
-static unsigned int apparmor_hash_size;
+static unsigned int pyronia_hash_size;
 
-static struct crypto_shash *apparmor_tfm;
+static struct crypto_shash *pyronia_tfm;
 
-unsigned int aa_hash_size(void)
+unsigned int pyr_hash_size(void)
 {
-	return apparmor_hash_size;
+	return pyronia_hash_size;
 }
 
-int aa_calc_profile_hash(struct aa_profile *profile, u32 version, void *start,
+int pyr_calc_profile_hash(struct pyr_profile *profile, u32 version, void *start,
 			 size_t len)
 {
 	struct {
 		struct shash_desc shash;
-		char ctx[crypto_shash_descsize(apparmor_tfm)];
+		char ctx[crypto_shash_descsize(pyronia_tfm)];
 	} desc;
 	int error = -ENOMEM;
 	u32 le32_version = cpu_to_le32(version);
 
-	if (!aa_g_hash_policy)
+	if (!pyr_g_hash_policy)
 		return 0;
 
-	if (!apparmor_tfm)
+	if (!pyronia_tfm)
 		return 0;
 
-	profile->hash = kzalloc(apparmor_hash_size, GFP_KERNEL);
+	profile->hash = kzalloc(pyronia_hash_size, GFP_KERNEL);
 	if (!profile->hash)
 		goto fail;
 
-	desc.shash.tfm = apparmor_tfm;
+	desc.shash.tfm = pyronia_tfm;
 	desc.shash.flags = 0;
 
 	error = crypto_shash_init(&desc.shash);
@@ -78,19 +78,19 @@ static int __init init_profile_hash(void)
 {
 	struct crypto_shash *tfm;
 
-	if (!apparmor_initialized)
+	if (!pyronia_initialized)
 		return 0;
 
 	tfm = crypto_alloc_shash("sha1", 0, CRYPTO_ALG_ASYNC);
 	if (IS_ERR(tfm)) {
 		int error = PTR_ERR(tfm);
-		AA_ERROR("failed to setup profile sha1 hashing: %d\n", error);
+		PYR_ERROR("failed to setup profile sha1 hashing: %d\n", error);
 		return error;
 	}
-	apparmor_tfm = tfm;
-	apparmor_hash_size = crypto_shash_digestsize(apparmor_tfm);
+	pyronia_tfm = tfm;
+	pyronia_hash_size = crypto_shash_digestsize(pyronia_tfm);
 
-	aa_info_message("AppArmor sha1 policy hashing enabled");
+	pyr_info_message("Pyronia sha1 policy hashing enabled");
 
 	return 0;
 }

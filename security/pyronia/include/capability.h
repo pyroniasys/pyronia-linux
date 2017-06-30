@@ -12,23 +12,23 @@
  * License.
  */
 
-#ifndef __AA_CAPABILITY_H
-#define __AA_CAPABILITY_H
+#ifndef __PYR_CAPABILITY_H
+#define __PYR_CAPABILITY_H
 
 #include <linux/sched.h>
 
-#include "apparmorfs.h"
+#include "pyroniafs.h"
 
-struct aa_profile;
+struct pyr_profile;
 
-/* aa_caps - confinement data for capabilities
+/* pyr_caps - confinement data for capabilities
  * @allowed: capabilities mask
  * @audit: caps that are to be audited
  * @quiet: caps that should not be audited
  * @kill: caps that when requested will result in the task being killed
  * @extended: caps that are subject finer grained mediation
  */
-struct aa_caps {
+struct pyr_caps {
 	kernel_cap_t allow;
 	kernel_cap_t audit;
 	kernel_cap_t quiet;
@@ -36,13 +36,13 @@ struct aa_caps {
 	kernel_cap_t extended;
 };
 
-extern struct aa_fs_entry aa_fs_entry_caps[];
+extern struct pyr_fs_entry pyr_fs_entry_caps[];
 
-int aa_capable(struct aa_profile *profile, int cap, int audit);
+int pyr_capable(struct pyr_profile *profile, int cap, int audit);
 
-static inline void aa_free_cap_rules(struct aa_caps *caps)
+static inline void pyr_free_cap_rules(struct pyr_caps *caps)
 {
 	/* NOP */
 }
 
-#endif /* __AA_CAPBILITY_H */
+#endif /* __PYR_CAPBILITY_H */

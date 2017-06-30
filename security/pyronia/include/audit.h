@@ -12,8 +12,8 @@
  * License.
  */
 
-#ifndef __AA_AUDIT_H
-#define __AA_AUDIT_H
+#ifndef __PYR_AUDIT_H
+#define __PYR_AUDIT_H
 
 #include <linux/audit.h>
 #include <linux/fs.h>
@@ -23,9 +23,9 @@
 
 #include "file.h"
 
-struct aa_profile;
+struct pyr_profile;
 
-extern const char *const audit_mode_names[];
+extern const char *const pyr_audit_mode_names[];
 #define AUDIT_MAX_INDEX 5
 enum audit_mode {
 	AUDIT_NORMAL,		/* follow normal auditing of accesses */
@@ -36,18 +36,18 @@ enum audit_mode {
 };
 
 enum audit_type {
-	AUDIT_APPARMOR_AUDIT,
-	AUDIT_APPARMOR_ALLOWED,
-	AUDIT_APPARMOR_DENIED,
-	AUDIT_APPARMOR_HINT,
-	AUDIT_APPARMOR_STATUS,
-	AUDIT_APPARMOR_ERROR,
-	AUDIT_APPARMOR_KILL,
-	AUDIT_APPARMOR_AUTO
+	AUDIT_PYRONIA_AUDIT,
+	AUDIT_PYRONIA_ALLOWED,
+	AUDIT_PYRONIA_DENIED,
+	AUDIT_PYRONIA_HINT,
+	AUDIT_PYRONIA_STATUS,
+	AUDIT_PYRONIA_ERROR,
+	AUDIT_PYRONIA_KILL,
+	AUDIT_PYRONIA_AUTO
 };
 
-extern const char *const op_table[];
-enum aa_ops {
+extern const char *const pyr_op_table[];
+enum pyr_ops {
 	OP_NULL,
 
 	OP_SYSCTL,
@@ -106,7 +106,7 @@ enum aa_ops {
 };
 
 
-struct apparmor_audit_data {
+struct pyronia_audit_data {
 	int error;
 	int op;
 	int type;
@@ -143,12 +143,12 @@ struct apparmor_audit_data {
 	};
 };
 
-/* define a short hand for apparmor_audit_data structure */
-#define aad apparmor_audit_data
+/* define a short hand for pyronia_audit_data structure */
+#define pyrd pyronia_audit_data
 
-void aa_audit_msg(int type, struct common_audit_data *sa,
+void pyr_audit_msg(int type, struct common_audit_data *sa,
 		  void (*cb) (struct audit_buffer *, void *));
-int aa_audit(int type, struct aa_profile *profile, gfp_t gfp,
+int pyr_audit(int type, struct pyr_profile *profile, gfp_t gfp,
 	     struct common_audit_data *sa,
 	     void (*cb) (struct audit_buffer *, void *));
 
@@ -159,4 +159,4 @@ static inline int complain_error(int error)
 	return error;
 }
 
-#endif /* __AA_AUDIT_H */
+#endif /* __PYR_AUDIT_H */

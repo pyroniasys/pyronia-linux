@@ -12,14 +12,14 @@
  * License.
  */
 
-#ifndef __AA_PROCATTR_H
-#define __AA_PROCATTR_H
+#ifndef __PYR_PROCATTR_H
+#define __PYR_PROCATTR_H
 
-#define AA_DO_TEST 1
-#define AA_ONEXEC  1
+#define PYR_DO_TEST 1
+#define PYR_ONEXEC  1
 
-int aa_getprocattr(struct aa_profile *profile, char **string);
-int aa_setprocattr_changehat(char *args, size_t size, int test);
-int aa_setprocattr_changeprofile(char *fqname, bool onexec, int test);
+int pyr_getprocattr(struct pyr_profile *profile, char **string);
+int pyr_setprocattr_changehat(char *args, size_t size, int test);
+int pyr_setprocattr_changeprofile(char *fqname, bool onexec, int test);
 
-#endif /* __AA_PROCATTR_H */
+#endif /* __PYR_PROCATTR_H */

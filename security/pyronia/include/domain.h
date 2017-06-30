@@ -15,24 +15,24 @@
 #include <linux/binfmts.h>
 #include <linux/types.h>
 
-#ifndef __AA_DOMAIN_H
-#define __AA_DOMAIN_H
+#ifndef __PYR_DOMAIN_H
+#define __PYR_DOMAIN_H
 
-struct aa_domain {
+struct pyr_domain {
 	int size;
 	char **table;
 };
 
-struct aa_profile *x_table_lookup(struct aa_profile *profile, u32 xindex);
+struct pyr_profile *pyr_x_table_lookup(struct pyr_profile *profile, u32 xindex);
 
-int apparmor_bprm_set_creds(struct linux_binprm *bprm);
-int apparmor_bprm_secureexec(struct linux_binprm *bprm);
-void apparmor_bprm_committing_creds(struct linux_binprm *bprm);
-void apparmor_bprm_committed_creds(struct linux_binprm *bprm);
+int pyronia_bprm_set_creds(struct linux_binprm *bprm);
+int pyronia_bprm_secureexec(struct linux_binprm *bprm);
+void pyronia_bprm_committing_creds(struct linux_binprm *bprm);
+void pyronia_bprm_committed_creds(struct linux_binprm *bprm);
 
-void aa_free_domain_entries(struct aa_domain *domain);
-int aa_change_hat(const char *hats[], int count, u64 token, bool permtest);
-int aa_change_profile(const char *ns_name, const char *name, bool onexec,
+void pyr_free_domain_entries(struct pyr_domain *domain);
+int pyr_change_hat(const char *hats[], int count, u64 token, bool permtest);
+int pyr_change_profile(const char *ns_name, const char *name, bool onexec,
 		      bool permtest);
 
-#endif /* __AA_DOMAIN_H */
+#endif /* __PYR_DOMAIN_H */

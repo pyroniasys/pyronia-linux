@@ -12,8 +12,8 @@
  * License.
  */
 
-#ifndef __AA_POLICY_H
-#define __AA_POLICY_H
+#ifndef __PYR_POLICY_H
+#define __PYR_POLICY_H
 
 #include <linux/capability.h>
 #include <linux/cred.h>
@@ -22,7 +22,7 @@
 #include <linux/slab.h>
 #include <linux/socket.h>
 
-#include "apparmor.h"
+#include "pyronia.h"
 #include "audit.h"
 #include "capability.h"
 #include "domain.h"
@@ -30,16 +30,16 @@
 #include "net.h"
 #include "resource.h"
 
-extern const char *const aa_profile_mode_names[];
-#define APPARMOR_MODE_NAMES_MAX_INDEX 4
+extern const char *const pyr_profile_mode_names[];
+#define PYRONIA_MODE_NAMES_MAX_INDEX 4
 
 #define PROFILE_MODE(_profile, _mode)		\
-	((aa_g_profile_mode == (_mode)) ||	\
+	((pyr_g_profile_mode == (_mode)) ||	\
 	 ((_profile)->mode == (_mode)))
 
-#define COMPLAIN_MODE(_profile)	PROFILE_MODE((_profile), APPARMOR_COMPLAIN)
+#define COMPLAIN_MODE(_profile)	PROFILE_MODE((_profile), PYRONIA_COMPLAIN)
 
-#define KILL_MODE(_profile) PROFILE_MODE((_profile), APPARMOR_KILL)
+#define KILL_MODE(_profile) PROFILE_MODE((_profile), PYRONIA_KILL)
 
 #define PROFILE_IS_HAT(_profile) ((_profile)->flags & PFLAG_HAT)
 
@@ -54,10 +54,10 @@ extern const char *const aa_profile_mode_names[];
  * a mark and remove marked interface.
  */
 enum profile_mode {
-	APPARMOR_ENFORCE,	/* enforce access rules */
-	APPARMOR_COMPLAIN,	/* allow and log access violations */
-	APPARMOR_KILL,		/* kill task on access violation */
-	APPARMOR_UNCONFINED,	/* profile set to unconfined */
+	PYRONIA_ENFORCE,	/* enforce access rules */
+	PYRONIA_COMPLAIN,	/* allow and log access violations */
+	PYRONIA_KILL,		/* kill task on access violation */
+	PYRONIA_UNCONFINED,	/* profile set to unconfined */
 };
 
 enum profile_flags {
@@ -75,35 +75,35 @@ enum profile_flags {
 	PFLAG_MEDIATE_DELETED = 0x10000, /* mediate instead delegate deleted */
 };
 
-struct aa_profile;
+struct pyr_profile;
 
-/* struct aa_policy - common part of both namespaces and profiles
+/* struct pyr_policy - common part of both namespaces and profiles
  * @name: name of the object
  * @hname - The hierarchical name
  * @list: list policy object is on
  * @profiles: head of the profiles list contained in the object
  */
-struct aa_policy {
+struct pyr_policy {
 	char *name;
 	char *hname;
 	struct list_head list;
 	struct list_head profiles;
 };
 
-/* struct aa_ns_acct - accounting of profiles in namespace
+/* struct pyr_ns_acct - accounting of profiles in namespace
  * @max_size: maximum space allowed for all profiles in namespace
  * @max_count: maximum number of profiles that can be in this namespace
  * @size: current size of profiles
  * @count: current count of profiles (includes null profiles)
  */
-struct aa_ns_acct {
+struct pyr_ns_acct {
 	int max_size;
 	int max_count;
 	int size;
 	int count;
 };
 
-/* struct aa_namespace - namespace for a set of profiles
+/* struct pyr_namespace - namespace for a set of profiles
  * @base: common policy
  * @parent: parent of namespace
  * @lock: lock for modifying the object
@@ -112,11 +112,11 @@ struct aa_ns_acct {
  * @sub_ns: list of namespaces under the current namespace.
  * @uniq_null: uniq value used for null learning profiles
  * @uniq_id: a unique id count for the profiles in the namespace
- * @dents: dentries for the namespaces file entries in apparmorfs
+ * @dents: dentries for the namespaces file entries in pyroniafs
  *
- * An aa_namespace defines the set profiles that are searched to determine
+ * An pyr_namespace defines the set profiles that are searched to determine
  * which profile to attach to a task.  Profiles can not be shared between
- * aa_namespaces and profile names within a namespace are guaranteed to be
+ * pyr_namespaces and profile names within a namespace are guaranteed to be
  * unique.  When profiles in separate namespaces have the same name they
  * are NOT considered to be equivalent.
  *
@@ -128,37 +128,37 @@ struct aa_ns_acct {
  * FIXME TODO: add vserver support of namespaces (can it all be done in
  *             userspace?)
  */
-struct aa_namespace {
-	struct aa_policy base;
-	struct aa_namespace *parent;
+struct pyr_namespace {
+	struct pyr_policy base;
+	struct pyr_namespace *parent;
 	struct mutex lock;
-	struct aa_ns_acct acct;
-	struct aa_profile *unconfined;
+	struct pyr_ns_acct acct;
+	struct pyr_profile *unconfined;
 	struct list_head sub_ns;
 	atomic_t uniq_null;
 	long uniq_id;
 
-	struct dentry *dents[AAFS_NS_SIZEOF];
+	struct dentry *dents[PYRFS_NS_SIZEOF];
 };
 
-/* struct aa_policydb - match engine for a policy
+/* struct pyr_policydb - match engine for a policy
  * dfa: dfa pattern match
  * start: set of start states for the different classes of data
  */
-struct aa_policydb {
+struct pyr_policydb {
 	/* Generic policy DFA specific rule types will be subsections of it */
-	struct aa_dfa *dfa;
-	unsigned int start[AA_CLASS_LAST + 1];
+	struct pyr_dfa *dfa;
+	unsigned int start[PYR_CLASS_LAST + 1];
 
 };
 
-struct aa_replacedby {
+struct pyr_replacedby {
 	struct kref count;
-	struct aa_profile __rcu *profile;
+	struct pyr_profile __rcu *profile;
 };
 
 
-/* struct aa_profile - basic confinement data
+/* struct pyr_profile - basic confinement data
  * @base - base components of the profile (name, refcount, lists, lock ...)
  * @count: reference count of the obj
  * @rcu: rcu head used when removing from @list
@@ -180,10 +180,10 @@ struct aa_replacedby {
  * @net: network controls for the profile
  * @rlimits: rlimits for the profile
  *
- * @dents: dentries for the profiles file entries in apparmorfs
- * @dirname: name of the profile dir in apparmorfs
+ * @dents: dentries for the profiles file entries in pyroniafs
+ * @dirname: name of the profile dir in pyroniafs
  *
- * The AppArmor profile contains the basic confinement data.  Each profile
+ * The Pyronia profile contains the basic confinement data.  Each profile
  * has a name, and exists in a namespace.  The @name and @exec_match are
  * used to determine profile attachment against unconfined tasks.  All other
  * attachments are determined by profile X transition rules.
@@ -197,18 +197,18 @@ struct aa_replacedby {
  * character.  If a profile name begins with / it will be considered when
  * determining profile attachment on "unconfined" tasks.
  */
-struct aa_profile {
-	struct aa_policy base;
+struct pyr_profile {
+	struct pyr_policy base;
 	struct kref count;
 	struct rcu_head rcu;
-	struct aa_profile __rcu *parent;
+	struct pyr_profile __rcu *parent;
 
-	struct aa_namespace *ns;
-	struct aa_replacedby *replacedby;
+	struct pyr_namespace *ns;
+	struct pyr_replacedby *replacedby;
 	const char *rename;
 
 	const char *attach;
-	struct aa_dfa *xmatch;
+	struct pyr_dfa *xmatch;
 	int xmatch_len;
 	enum audit_mode audit;
 	long mode;
@@ -216,64 +216,64 @@ struct aa_profile {
 	u32 path_flags;
 	int size;
 
-	struct aa_policydb policy;
-	struct aa_file_rules file;
-	struct aa_caps caps;
-	struct aa_net net;
-	struct aa_rlimit rlimits;
+	struct pyr_policydb policy;
+	struct pyr_file_rules file;
+	struct pyr_caps caps;
+	struct pyr_net net;
+	struct pyr_rlimit rlimits;
 
 	unsigned char *hash;
 	char *dirname;
-	struct dentry *dents[AAFS_PROF_SIZEOF];
+	struct dentry *dents[PYRFS_PROF_SIZEOF];
 };
 
-extern struct aa_namespace *root_ns;
-extern enum profile_mode aa_g_profile_mode;
+extern struct pyr_namespace *pyr_root_ns;
+extern enum profile_mode pyr_g_profile_mode;
 
-void aa_add_profile(struct aa_policy *common, struct aa_profile *profile);
+void pyr_add_profile(struct pyr_policy *common, struct pyr_profile *profile);
 
-bool aa_ns_visible(struct aa_namespace *curr, struct aa_namespace *view);
-const char *aa_ns_name(struct aa_namespace *parent, struct aa_namespace *child);
-int aa_alloc_root_ns(void);
-void aa_free_root_ns(void);
-void aa_free_namespace_kref(struct kref *kref);
+bool pyr_ns_visible(struct pyr_namespace *curr, struct pyr_namespace *view);
+const char *pyr_ns_name(struct pyr_namespace *parent, struct pyr_namespace *child);
+int pyr_alloc_root_ns(void);
+void pyr_free_root_ns(void);
+void pyr_free_namespace_kref(struct kref *kref);
 
-struct aa_namespace *aa_find_namespace(struct aa_namespace *root,
+struct pyr_namespace *pyr_find_namespace(struct pyr_namespace *root,
 				       const char *name);
 
 
-void aa_free_replacedby_kref(struct kref *kref);
-struct aa_profile *aa_alloc_profile(const char *name);
-struct aa_profile *aa_new_null_profile(struct aa_profile *parent, int hat);
-void aa_free_profile(struct aa_profile *profile);
-void aa_free_profile_kref(struct kref *kref);
-struct aa_profile *aa_find_child(struct aa_profile *parent, const char *name);
-struct aa_profile *aa_lookup_profile(struct aa_namespace *ns, const char *name);
-struct aa_profile *aa_match_profile(struct aa_namespace *ns, const char *name);
+void pyr_free_replacedby_kref(struct kref *kref);
+struct pyr_profile *pyr_alloc_profile(const char *name);
+struct pyr_profile *pyr_new_null_profile(struct pyr_profile *parent, int hat);
+void pyr_free_profile(struct pyr_profile *profile);
+void pyr_free_profile_kref(struct kref *kref);
+struct pyr_profile *pyr_find_child(struct pyr_profile *parent, const char *name);
+struct pyr_profile *pyr_lookup_profile(struct pyr_namespace *ns, const char *name);
+struct pyr_profile *pyr_match_profile(struct pyr_namespace *ns, const char *name);
 
-ssize_t aa_replace_profiles(void *udata, size_t size, bool noreplace);
-ssize_t aa_remove_profiles(char *name, size_t size);
+ssize_t pyr_replace_profiles(void *udata, size_t size, bool noreplace);
+ssize_t pyr_remove_profiles(char *name, size_t size);
 
 #define PROF_ADD 1
 #define PROF_REPLACE 0
 
-#define unconfined(X) ((X)->mode == APPARMOR_UNCONFINED)
+#define unconfined(X) ((X)->mode == PYRONIA_UNCONFINED)
 
 
-static inline struct aa_profile *aa_deref_parent(struct aa_profile *p)
+static inline struct pyr_profile *pyr_deref_parent(struct pyr_profile *p)
 {
 	return rcu_dereference_protected(p->parent,
 					 mutex_is_locked(&p->ns->lock));
 }
 
 /**
- * aa_get_profile - increment refcount on profile @p
+ * pyr_get_profile - increment refcount on profile @p
  * @p: profile  (MAYBE NULL)
  *
  * Returns: pointer to @p if @p is NULL will return NULL
  * Requires: @p must be held with valid refcount when called
  */
-static inline struct aa_profile *aa_get_profile(struct aa_profile *p)
+static inline struct pyr_profile *pyr_get_profile(struct pyr_profile *p)
 {
 	if (p)
 		kref_get(&(p->count));
@@ -282,13 +282,13 @@ static inline struct aa_profile *aa_get_profile(struct aa_profile *p)
 }
 
 /**
- * aa_get_profile_not0 - increment refcount on profile @p found via lookup
+ * pyr_get_profile_not0 - increment refcount on profile @p found via lookup
  * @p: profile  (MAYBE NULL)
  *
  * Returns: pointer to @p if @p is NULL will return NULL
  * Requires: @p must be held with valid refcount when called
  */
-static inline struct aa_profile *aa_get_profile_not0(struct aa_profile *p)
+static inline struct pyr_profile *pyr_get_profile_not0(struct pyr_profile *p)
 {
 	if (p && kref_get_not0(&p->count))
 		return p;
@@ -297,15 +297,15 @@ static inline struct aa_profile *aa_get_profile_not0(struct aa_profile *p)
 }
 
 /**
- * aa_get_profile_rcu - increment a refcount profile that can be replaced
+ * pyr_get_profile_rcu - increment a refcount profile that can be replaced
  * @p: pointer to profile that can be replaced (NOT NULL)
  *
  * Returns: pointer to a refcounted profile.
  *     else NULL if no profile
  */
-static inline struct aa_profile *aa_get_profile_rcu(struct aa_profile __rcu **p)
+static inline struct pyr_profile *pyr_get_profile_rcu(struct pyr_profile __rcu **p)
 {
-	struct aa_profile *c;
+	struct pyr_profile *c;
 
 	rcu_read_lock();
 	do {
@@ -317,35 +317,35 @@ static inline struct aa_profile *aa_get_profile_rcu(struct aa_profile __rcu **p)
 }
 
 /**
- * aa_get_newest_profile - find the newest version of @profile
+ * pyr_get_newest_profile - find the newest version of @profile
  * @profile: the profile to check for newer versions of
  *
  * Returns: refcounted newest version of @profile taking into account
  *          replacement, renames and removals
  *          return @profile.
  */
-static inline struct aa_profile *aa_get_newest_profile(struct aa_profile *p)
+static inline struct pyr_profile *pyr_get_newest_profile(struct pyr_profile *p)
 {
 	if (!p)
 		return NULL;
 
 	if (PROFILE_INVALID(p))
-		return aa_get_profile_rcu(&p->replacedby->profile);
+		return pyr_get_profile_rcu(&p->replacedby->profile);
 
-	return aa_get_profile(p);
+	return pyr_get_profile(p);
 }
 
 /**
- * aa_put_profile - decrement refcount on profile @p
+ * pyr_put_profile - decrement refcount on profile @p
  * @p: profile  (MAYBE NULL)
  */
-static inline void aa_put_profile(struct aa_profile *p)
+static inline void pyr_put_profile(struct pyr_profile *p)
 {
 	if (p)
-		kref_put(&p->count, aa_free_profile_kref);
+		kref_put(&p->count, pyr_free_profile_kref);
 }
 
-static inline struct aa_replacedby *aa_get_replacedby(struct aa_replacedby *p)
+static inline struct pyr_replacedby *pyr_get_replacedby(struct pyr_replacedby *p)
 {
 	if (p)
 		kref_get(&(p->count));
@@ -353,61 +353,61 @@ static inline struct aa_replacedby *aa_get_replacedby(struct aa_replacedby *p)
 	return p;
 }
 
-static inline void aa_put_replacedby(struct aa_replacedby *p)
+static inline void pyr_put_replacedby(struct pyr_replacedby *p)
 {
 	if (p)
-		kref_put(&p->count, aa_free_replacedby_kref);
+		kref_put(&p->count, pyr_free_replacedby_kref);
 }
 
 /* requires profile list write lock held */
-static inline void __aa_update_replacedby(struct aa_profile *orig,
-					  struct aa_profile *new)
+static inline void __pyr_update_replacedby(struct pyr_profile *orig,
+					  struct pyr_profile *new)
 {
-	struct aa_profile *tmp;
+	struct pyr_profile *tmp;
 	tmp = rcu_dereference_protected(orig->replacedby->profile,
 					mutex_is_locked(&orig->ns->lock));
-	rcu_assign_pointer(orig->replacedby->profile, aa_get_profile(new));
+	rcu_assign_pointer(orig->replacedby->profile, pyr_get_profile(new));
 	orig->flags |= PFLAG_INVALID;
-	aa_put_profile(tmp);
+	pyr_put_profile(tmp);
 }
 
 /**
- * aa_get_namespace - increment references count on @ns
+ * pyr_get_namespace - increment references count on @ns
  * @ns: namespace to increment reference count of (MAYBE NULL)
  *
  * Returns: pointer to @ns, if @ns is NULL returns NULL
  * Requires: @ns must be held with valid refcount when called
  */
-static inline struct aa_namespace *aa_get_namespace(struct aa_namespace *ns)
+static inline struct pyr_namespace *pyr_get_namespace(struct pyr_namespace *ns)
 {
 	if (ns)
-		aa_get_profile(ns->unconfined);
+		pyr_get_profile(ns->unconfined);
 
 	return ns;
 }
 
 /**
- * aa_put_namespace - decrement refcount on @ns
+ * pyr_put_namespace - decrement refcount on @ns
  * @ns: namespace to put reference of
  *
  * Decrement reference count of @ns and if no longer in use free it
  */
-static inline void aa_put_namespace(struct aa_namespace *ns)
+static inline void pyr_put_namespace(struct pyr_namespace *ns)
 {
 	if (ns)
-		aa_put_profile(ns->unconfined);
+		pyr_put_profile(ns->unconfined);
 }
 
-static inline int AUDIT_MODE(struct aa_profile *profile)
+static inline int AUDIT_MODE(struct pyr_profile *profile)
 {
-	if (aa_g_audit != AUDIT_NORMAL)
-		return aa_g_audit;
+	if (pyr_g_audit != AUDIT_NORMAL)
+		return pyr_g_audit;
 
 	return profile->audit;
 }
 
-bool policy_view_capable(void);
-bool policy_admin_capable(void);
-bool aa_may_manage_policy(int op);
+bool pyr_policy_view_capable(void);
+bool pyr_policy_admin_capable(void);
+bool pyr_may_manage_policy(int op);
 
-#endif /* __AA_POLICY_H */
+#endif /* __PYR_POLICY_H */
