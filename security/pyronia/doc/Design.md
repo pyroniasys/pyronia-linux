@@ -5,6 +5,8 @@
 * Function pointer checker at language compile time
 * Callgraph generator
 * Inter-lib (i.e. at main application level) data tracking
+* API for protecting security-critical library state
+* Modify reflection library to trigger security check
 
 #### Callgraph generator
 * Stack inspection thread constructs the callgraph at runtime, recording the called module and any data tags at each stack frame
@@ -12,6 +14,13 @@
 
 #### Inter-lib data tracking
 * Goal: Track different data types between libraries to ensure that the correct data is sent to the correct destination server
+
+#### Security-critical library state protection
+* Concern: Malicious library may call into a trusted library in order to change security-critical state (e.g. call networking library to change data destination)
+* Goal: Protect sensitive library state against tampering and access by malicious/untrusted callers
+* Provide a security API that allows benevolent library developers to mark security critical state
+* Any access to marked state triggers an access control check much like a sensitive resource access in Pyronia
+* Provides an additional layer of security for an IoT application
 
 ## LSM components
 * Callgraph-LSM communication
