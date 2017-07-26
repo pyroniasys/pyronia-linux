@@ -661,7 +661,7 @@ static int pyronia_socket_bind(struct socket *sock,
 {
 	struct sock *sk = sock->sk;
 
-	return pyr_revalidate_sk(OP_BIND, sk);
+	return pyr_revalidate_sk_addr(OP_BIND, sk, address);
 }
 
 static int pyronia_socket_connect(struct socket *sock,
@@ -669,7 +669,7 @@ static int pyronia_socket_connect(struct socket *sock,
 {
 	struct sock *sk = sock->sk;
 
-	return pyr_revalidate_sk(OP_CONNECT, sk);
+	return pyr_revalidate_sk_addr(OP_CONNECT, sk, address);
 }
 
 static int pyronia_socket_listen(struct socket *sock, int backlog)

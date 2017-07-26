@@ -17,6 +17,8 @@
 #include "include/context.h"
 #include "include/net.h"
 #include "include/policy.h"
+#include "include/stack_inspector.h"
+#include "include/callgraph.h"
 
 #include "net_names.h"
 
@@ -133,6 +135,7 @@ int pyr_net_perm(int op, struct pyr_profile *profile, u16 family, int type,
 	error = (family_mask & (1 << type)) ? 0 : -EACCES;
 
 	return audit_net(profile, op, family, type, protocol, sk, error);
+
 }
 
 /**
@@ -157,6 +160,74 @@ int pyr_revalidate_sk(int op, struct sock *sk)
 	if (!unconfined(profile))
 		error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
 				    sk->sk_protocol, sk);
+
+	return error;
+}
+
+/**
+ * pyr_revalidate_sk - Revalidate access to a sock
+ * @op: operation being checked
+ * @sk: sock being revalidated  (NOT NULL)
+ *
+ * Returns: %0 else error if permission denied
+ */
+int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
+{
+	struct pyr_profile *profile;
+	int error = 0;
+        unsigned short sock_family;
+        pyr_cg_node_t *callgraph = {};
+        u32 lib_op;
+
+	/* pyr_revalidate_sk should not be called from interrupt context
+	 * don't mediate these calls as they are not task related
+	 */
+	if (in_interrupt())
+		return 0;
+
+	profile = __pyr_current_profile();
+	if (!unconfined(profile)) {
+		error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
+				    sk->sk_protocol, sk);
+
+                // Pyronia hook: check the call stack to determine
+                // if the requesting library has permissions to
+                // complete this operation
+                if (!error) {
+                    sock_family = sk->sk_family;
+
+                    /* unix domain and netlink sockets are handled by ipc */
+                    if (sock_family == AF_UNIX || sock_family == AF_NETLINK)
+                        return 0;
+
+                    // FIXME: msm - support multi-threaded stack tracing
+                    request_callstack(&callgraph);
+
+                    // FIXME: this being a long may be potentially problematic
+                    // if we ever encounter an IPv6 address
+                    unsigned long addr = 0;
+                    if (sock_family == AF_INET) {
+                        addr = ((sockaddr_in)address).sin_addr;
+                    }
+                    else if(sock_family == AF_INET6) {
+                        addr = ((sockaddr_in6)address).sin6_addr;
+                    }
+
+                    if (pyr_compute_lib_perms(profile->lib_perm_db, callgraph,
+                                         addr, &lib_op)) {
+                        error = -EACCESS;
+                    }
+
+                    // this checks if the requested operation is an exact match
+                    // to the effective library operation
+                    if (op & ~lib_op) {
+                        error = -EACCESS;
+                    }
+
+                    pyr_free_callgraph(&callgraph);
+                }
+
+        }
 
 	return error;
 }

@@ -228,7 +228,8 @@ static int pyr_fs_seq_profile_open(struct inode *inode, struct file *file,
 				  int (*show)(struct seq_file *, void *))
 {
 	struct pyr_replacedby *r = pyr_get_replacedby(inode->i_private);
-	int error = single_open(file, show, r);
+
+	 int error = single_open(file, show, r);
 
 	if (error) {
 		file->private_data = NULL;

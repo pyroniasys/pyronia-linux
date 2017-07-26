@@ -56,7 +56,7 @@ enum pyr_code {
 
 /*
  * pyr_ext is the read of the buffer containing the serialized profile.  The
- * data is copied into a kernel buffer in apparmorfs and then handed off to
+ * data is copied into a kernel buffer in pyroniafs and then handed off to
  * the unpack routines.
  */
 struct pyr_ext {

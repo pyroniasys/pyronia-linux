@@ -1,10 +1,11 @@
 /*
- * AppArmor security module
+ * Pyronia security module
  *
- * This file contains AppArmor capability mediation definitions.
+ * This file contains Pyronia capability mediation definitions.
  *
  * Copyright (C) 1998-2008 Novell/SUSE
  * Copyright 2009-2013 Canonical Ltd.
+ * Copyright (C) 2017 Princeton University
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as

@@ -1,10 +1,11 @@
 /*
- * AppArmor security module
+ * Pyronia security module
  *
- * This file contains AppArmor auditing functions
+ * This file contains Pyronia auditing functions
  *
  * Copyright (C) 1998-2008 Novell/SUSE
  * Copyright 2009-2010 Canonical Ltd.
+ * Copyright (C) 2017 Princeton University
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -97,7 +98,7 @@ static const char *const pyr_audit_type[] = {
 };
 
 /*
- * Currently AppArmor auditing is fed straight into the audit framework.
+ * Currently Pyronia auditing is fed straight into the audit framework.
  *
  * TODO:
  * netlink interface for complain mode
@@ -106,11 +107,11 @@ static const char *const pyr_audit_type[] = {
  */
 
 /**
- * audit_base - core AppArmor function.
+ * audit_base - core Pyronia function.
  * @ab: audit buffer to fill (NOT NULL)
  * @ca: audit structure containing data to audit (NOT NULL)
  *
- * Record common AppArmor audit data from @sa
+ * Record common Pyronia audit data from @sa
  */
 static void audit_pre(struct audit_buffer *ab, void *ca)
 {

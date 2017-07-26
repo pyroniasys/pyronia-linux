@@ -35,6 +35,7 @@ extern struct pyr_fs_entry pyr_fs_entry_network[];
 extern int pyr_net_perm(int op, struct pyr_profile *profile, u16 family,
 		       int type, int protocol, struct sock *sk);
 extern int pyr_revalidate_sk(int op, struct sock *sk);
+extern int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address);
 
 static inline void pyr_free_net_rules(struct pyr_net *new)
 {

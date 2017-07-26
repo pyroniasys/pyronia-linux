@@ -29,6 +29,7 @@
 #include "file.h"
 #include "net.h"
 #include "resource.h"
+#include "lib_policy.h"
 
 extern const char *const pyr_profile_mode_names[];
 #define PYRONIA_MODE_NAMES_MAX_INDEX 4
@@ -147,8 +148,8 @@ struct pyr_namespace {
  */
 struct pyr_policydb {
 	/* Generic policy DFA specific rule types will be subsections of it */
-	struct pyr_dfa *dfa;
-	unsigned int start[PYR_CLASS_LAST + 1];
+    struct pyr_dfa *dfa;
+    unsigned int start[PYR_CLASS_LAST + 1];
 
 };
 
@@ -179,6 +180,7 @@ struct pyr_replacedby {
  * @caps: capabilities for the profile
  * @net: network controls for the profile
  * @rlimits: rlimits for the profile
+ * @lib_perm_db: the library-specific permissions for the profile
  *
  * @dents: dentries for the profiles file entries in pyroniafs
  * @dirname: name of the profile dir in pyroniafs
@@ -221,6 +223,7 @@ struct pyr_profile {
 	struct pyr_caps caps;
 	struct pyr_net net;
 	struct pyr_rlimit rlimits;
+        struct pyr_lib_policy_db lib_perm_db;
 
 	unsigned char *hash;
 	char *dirname;
