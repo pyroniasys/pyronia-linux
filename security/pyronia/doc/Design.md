@@ -15,9 +15,14 @@
 * Hook into policy_unpack.c
 
 #### Stack inspection and callgraph generator
+* In progress
 * Stack inspection thread constructs the callgraph at runtime
 * SI thread generates the callgraph upon request from the LSM (e.g. at the time of a file open); callgraph includes the called module and any data tags at each stack frame
 * SI thread registers with LSM at startup and sends the collected callgraph via the LSM-communication channel
+* Question: How do we reason about the semantics of the stack inspection decision?
+* Simple logic: based on intersection of all known libraries on stack
+* Question: What are all the possible side-effecs?
+    * Frequency of access
 
 #### Inter-lib data tracking
 Goal: Track different data types between libraries at the main application level to ensure that the expected data type is sent to the specified destination server
@@ -28,6 +33,7 @@ Goal: Track different data types between libraries at the main application level
 * Provide a security API that allows benevolent library developers to mark security critical state
 * Any access to marked state triggers an access control check much like a sensitive resource access in Pyronia
 * Provides an additional layer of security for an IoT application
+* Decorators?
 
 #### Restrict dangerous/insecure language features
 Some language features are considered dangerous in the context of library-level MAC, and should no longer be supported by the language:
@@ -49,10 +55,14 @@ Due to the heavy use of native libraries and tools in IoT application developmen
 * LSM opens a secure communication channel (dedicated Unix socket) to SI thread in language runtime at startup
 * Whenever a callgraph check is required, the LSM calls back into the SI thread to request callgraph information
 
-#### Native code callgraph generator
-This is needed to create a comprehensive callgraph across the language runtime and native contexts.
+#### Process-based memory isolation of native libraries
+* Pass exec'd native library process info to kernel
+* Build a whitelist of libraries that don't need to be triggered everytime
+* Evaluate forking new proc every time vs caching common libs
+* Get call graph via ptrace syscall?
 
 #### Library Permissions checker in LSM
+* 
 * Maintain separate permissions database for lib-level permissions
 * Apply library-level permissions to process level as first step (this is the original AppArmor behaviour)
 * Check the library-level permissions by traversing the callgraph if the process-level access control check passes
@@ -61,7 +71,9 @@ This is needed to create a comprehensive callgraph across the language runtime a
 * Hook into file.c `pyr_path_perm()` for file access control checks
 
 #### Library file system sandbox
-Create a library-specific "scratch space" on the file system that can only be accessed by the specified library and the main application.
+* Create a library-specific "scratch space" on the file system that can only be accessed by the specified library and the main application.
+* Questions: file sharing between libraries
+* Is this not 
 
 #### Subprocess exec sandbox
 Sandbox each binary that is executed by the main application or any library into its own process and track together with the main application.
