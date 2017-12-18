@@ -1,0 +1,34 @@
+#!/bin/bash
+
+HOST=marcela@pluto.cs.princeton.edu
+SRC=/home/marcela/Research/lib-isolation/libpyronia
+LIBDIR=/home/pyronia/pyronia-linux/testing/libpyronia
+
+rsync -rzv $HOST:$SRC .
+
+cd $LIBDIR
+cd libraries/libapparmor
+./autogen.sh
+./configure --prefix=/usr --with-perl --with-python
+sudo make
+sudo make install
+
+cd $LIBDIR
+cd binutils
+sudo make
+sudo make install
+
+cd $LIBDIR
+cd utils
+sudo make
+sudo make install
+
+cd $LIBDIR
+cd parser
+sudo make
+sudo make install
+
+cd $LIBDIR
+cd profiles
+sudo make
+sudo make install

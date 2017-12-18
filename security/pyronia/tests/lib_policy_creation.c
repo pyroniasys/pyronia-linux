@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "tests.h"
+#include "testutil.h"
 
 int main(int argc, char *argv[]) {
 

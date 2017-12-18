@@ -11,10 +11,17 @@
  * License.
  */
 
-#include <string.h>
 #include "include/lib_policy.h"
 
+#ifdef PYR_TESTING
+#if PYR_TESTING
+#include "include/kernel_test.h"
+#else
 #include "include/userland_test.h"
+#endif
+#else
+#include "include/pyronia.h"
+#endif
 
 // Allocates a new ACL entry and adds it to the ACL pointed to by `acl`.
 // This function can also be used to initialize `acl`.
@@ -22,7 +29,8 @@
 // Returns 0 on success, -1 on failure
 int pyr_add_acl_entry(struct pyr_acl_entry **acl,
                       enum acl_entry_type entry_type,
-                      const char *name, uint32_t perms,
+                      const char *name,
+                      u32 perms,
                       enum pyr_data_types data_type) {
     struct pyr_acl_entry *new_entry =
         (struct pyr_acl_entry *)kvzalloc(sizeof(struct pyr_acl_entry));
@@ -143,7 +151,7 @@ struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *policy,
 
 // Returns the allowed permissions or operations associated
 // with the given ACL entry
-uint32_t pyr_get_perms_from_acl(struct pyr_acl_entry *acl) {
+u32 pyr_get_perms_from_acl(struct pyr_acl_entry *acl) {
     switch (acl->entry_type) {
         case(resource_entry):
             return acl->target.fs_resource.perms;
@@ -177,6 +185,10 @@ struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *policy_db,
 static void free_acl_entry(struct pyr_acl_entry **entry) {
     struct pyr_acl_entry *e = *entry;
 
+    if (e == NULL) {
+      return;
+    }
+
     if (e->next == NULL) {
         switch (e->entry_type) {
         case(resource_entry):
@@ -200,6 +212,10 @@ static void free_acl_entry(struct pyr_acl_entry **entry) {
 // Recursively free the lib policies
 static void free_lib_policy(struct pyr_lib_policy **policy) {
     struct pyr_lib_policy *p = *policy;
+
+    if (p == NULL) {
+      return;
+    }
 
     if (p->next == NULL) {
         p->lib = NULL;

@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "tests.h"
+#include "testutil.h"
 
 // create a policy with all libraries
 // and build a callgraph that results in allowed permissions
@@ -702,7 +702,7 @@ int main(int argc, char *argv[]) {
     int final_err = err;
     int num_tests = 0;
     int passed = 0;
-    PYR_DEBUG("Test successful policy verification... ");
+    PYR_DEBUG("Test successful policy verification... \n");
     num_tests++;
     err = test_policy_verification_success(libs, names, net);
     if (err) {
@@ -714,7 +714,7 @@ int main(int argc, char *argv[]) {
         printf("passed\n");
     }
 
-    PYR_DEBUG("Test failed policy verification... ");
+    PYR_DEBUG("Test failed policy verification... \n");
     num_tests++;
     err = test_policy_verification_fail(libs, names, net);
     if (err) {
@@ -726,7 +726,7 @@ int main(int argc, char *argv[]) {
         printf("passed\n");
     }
 
-    PYR_DEBUG("Test allowed access against requested permissions... ");
+    PYR_DEBUG("Test allowed access against requested permissions... \n");
     num_tests++;
     err = test_against_requested_perms_success(libs, names, net);
     if (err) {
@@ -738,7 +738,7 @@ int main(int argc, char *argv[]) {
         printf("passed\n");
     }
 
-    PYR_DEBUG("Test failed access against requested permissions... ");
+    PYR_DEBUG("Test failed access against requested permissions... \n");
     num_tests++;
     err = test_against_requested_perms_failed(libs, names, net);
     if (err) {
@@ -750,7 +750,7 @@ int main(int argc, char *argv[]) {
         printf("passed\n");
     }
 
-    PYR_DEBUG("Test allowed access with unrecorded library in callgraph... ");
+    PYR_DEBUG("Test allowed access with unrecorded library in callgraph... \n");
     num_tests++;
     err = test_with_unrecorded_lib_success(libs, names, net);
     if (err) {
@@ -762,7 +762,7 @@ int main(int argc, char *argv[]) {
         printf("passed\n");
     }
 
-    PYR_DEBUG("Test failed access with unrecorded library in callgraph... ");
+    PYR_DEBUG("Test failed access with unrecorded library in callgraph... \n");
     num_tests++;
     err = test_with_unrecorded_lib_failed(libs, names, net);
     if (err) {
@@ -774,7 +774,7 @@ int main(int argc, char *argv[]) {
         printf("passed\n");
     }
 
-    PYR_DEBUG("Test unrecorded top-level library in callgraph... ");
+    PYR_DEBUG("Test unrecorded top-level library in callgraph... \n");
     num_tests++;
     err = test_unrecorded_root_lib(libs, names, net);
     if (err) {

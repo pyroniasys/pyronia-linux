@@ -1,7 +1,7 @@
 IDIR=../include
 LDIR=..
 CC=gcc
-CFLAGS=-iquote$(IDIR)
+CFLAGS=-iquote$(IDIR) -I../../../include -DPYR_TESTING=0
 MAKEFLAGS += --silent
 
 TESTS = lib_policy_creation_test callgraph_creation_test \

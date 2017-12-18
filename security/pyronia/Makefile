@@ -4,11 +4,12 @@ obj-$(CONFIG_SECURITY_PYRONIA) += pyronia.o
 
 pyronia-y := pyroniafs.o audit.o capability.o context.o ipc.o lib.o match.o \
               path.o domain.o policy.o policy_unpack.o procattr.o lsm.o \
-              resource.o sid.o file.o net.o mount.o
+              resource.o sid.o file.o net.o mount.o callgraph.o lib_policy.o
 pyronia-$(CONFIG_SECURITY_PYRONIA_HASH) += crypto.o
 
 clean-files := capability_names.h rlim_names.h net_names.h
 
+test-files := $(filter-out $(wildcard tests/*.c),$(wildcard tests/*.c))
 
 # Build a lower case string table of capability names
 # Transforms lines from

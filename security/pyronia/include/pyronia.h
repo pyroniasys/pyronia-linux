@@ -17,8 +17,12 @@
 
 #include <linux/slab.h>
 #include <linux/fs.h>
+#include <linux/mm.h>
 
 #include "match.h"
+
+// msm: comment this out if we're not testing
+#define PYR_TESTING 1
 
 /*
  * Class of mediation types in the AppArmor policy db
@@ -44,23 +48,6 @@ extern bool pyr_g_logsyscall;
 extern bool pyr_g_paranoid_load;
 extern unsigned int pyr_g_path_max;
 
-/*
- * DEBUG remains global (no per profile flag) since it is mostly used in sysctl
- * which is not related to profile accesses.
- */
-
-#define PYR_DEBUG(fmt, args...)						\
-	do {								\
-		if (pyr_g_debug && printk_ratelimit())			\
-			printk(KERN_DEBUG "Pyronia: " fmt, ##args);	\
-	} while (0)
-
-#define PYR_ERROR(fmt, args...)						\
-	do {								\
-		if (printk_ratelimit())					\
-			printk(KERN_ERR "Pyronia: " fmt, ##args);	\
-	} while (0)
-
 /* Flag indicating whether initialization completed */
 extern int pyronia_initialized __initdata;
 
@@ -68,6 +55,23 @@ extern int pyronia_initialized __initdata;
 char *pyr_split_fqname(char *args, char **ns_name);
 void pyr_info_message(const char *str);
 void *__pyr_kvmalloc(size_t size, gfp_t flags);
+
+/*
+ * DEBUG remains global (no per profile flag) since it is mostly used in sysctl
+ * which is not related to profile accesses.
+ */
+
+#ifndef PYR_TESTING
+#define PYR_DEBUG(fmt, args...)						\
+	do {								\
+		if (pyr_g_debug && printk_ratelimit())			\
+			printk(KERN_DEBUG "Pyronia: " fmt, ##args);	\
+	} while (0)
+#define PYR_ERROR(fmt, args...)						\
+	do {								\
+		if (printk_ratelimit())					\
+			printk(KERN_ERR "Pyronia: " fmt, ##args);	\
+	} while (0)
 
 static inline void *kvmalloc(size_t size)
 {
@@ -77,7 +81,35 @@ static inline void *kvmalloc(size_t size)
 static inline void *kvzalloc(size_t size)
 {
 	return __pyr_kvmalloc(size, __GFP_ZERO);
+
 }
+#else
+// re-define these functions for kernel-level testing.
+// Avoids having to import kernel_test.h in every Pyronia module.
+#if PYR_TESTING
+#define PYR_DEBUG(fmt, args...)						\
+	do {								\
+	  if (printk_ratelimit())					\
+			printk(KERN_DEBUG "Pyronia: " fmt, ##args);	\
+	} while (0)
+#define PYR_ERROR(fmt, args...)						\
+	do {								\
+		if (printk_ratelimit())					\
+			printk(KERN_ERR "Pyronia: " fmt, ##args);	\
+	} while (0)
+
+static inline void *kvmalloc(size_t size)
+{
+	return __pyr_kvmalloc(size, 0);
+}
+
+static inline void *kvzalloc(size_t size)
+{
+	return __pyr_kvmalloc(size, __GFP_ZERO);
+
+}
+#endif
+#endif
 
 /* returns 0 if kref not incremented */
 static inline int kref_get_not0(struct kref *kref)

@@ -29,6 +29,14 @@
 #include "include/policy.h"
 #include "include/policy_unpack.h"
 
+#ifdef PYR_TESTING
+#if PYR_TESTING
+#include "include/kernel_test.h"
+#else
+#include "include/userland_test.h"
+#endif
+#endif
+
 /*
  * The AppArmor interface treats data as a type byte followed by the
  * actual data.  The interface has the notion of a a named entry
@@ -664,6 +672,20 @@ static struct pyr_profile *unpack_profile(struct pyr_ext *e)
 
 	if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 		goto fail;
+
+#ifdef PYR_TESTING
+        // Pyronia hooks: set the library policies
+        if (init_lib_policy(&profile->lib_perm_db)) {
+            PYR_ERROR("Failed to create dummy library policies");
+            goto fail;
+        }
+
+        // set the lib file perms from the dfa
+        if (set_file_perms(profile)) {
+            PYR_ERROR("Failed to set dummy library file perms");
+            goto fail;
+        }
+#endif
 
 	return profile;
 

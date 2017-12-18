@@ -12,13 +12,24 @@
  * License.
  */
 
+#include <linux/inet.h>
+#include <uapi/linux/in.h>
+#include <uapi/linux/in6.h>
+
 #include "include/pyronia.h"
 #include "include/audit.h"
 #include "include/context.h"
 #include "include/net.h"
 #include "include/policy.h"
-#include "include/stack_inspector.h"
 #include "include/callgraph.h"
+
+#ifdef PYR_TESTING
+#if PYR_TESTING
+#include "include/kernel_test.h"
+#else
+#include "include/userland_test.h"
+#endif
+#endif
 
 #include "net_names.h"
 
@@ -105,7 +116,7 @@ static int audit_net(struct pyr_profile *profile, int op, u16 family, int type,
 }
 
 /**
- * pyr_net_perm - very course network access check
+ * pyr_net_perm - very coarse network access check
  * @op: operation being checked
  * @profile: profile being enforced  (NOT NULL)
  * @family: network family
@@ -164,6 +175,63 @@ int pyr_revalidate_sk(int op, struct sock *sk)
 	return error;
 }
 
+static void in_addr_to_str(struct sockaddr *sa, const char**addr_str)
+{
+    int in_addr, printed_bytes;
+    char ip_str[16];
+
+    if (sa->sa_family == AF_INET) {
+        in_addr = (int)((struct sockaddr_in*)sa)->sin_addr.s_addr;
+
+        printed_bytes = snprintf(ip_str, INET_ADDRSTRLEN, "%d.%d.%d.%d",
+                                 (in_addr & 0xFF),
+                                 ((in_addr & 0xFF00) >> 8),
+                                 ((in_addr & 0xFF0000) >> 16),
+                                 ((in_addr & 0xFF000000) >> 24));
+
+        if (printed_bytes > sizeof(ip_str)) {
+            *addr_str = NULL;
+            return;
+        }
+
+        *addr_str = ip_str;
+    }
+    else {
+        // FIXME: Actually support IPv6 addresses
+        //in_addr = (int)((struct sockaddr_in6*)sa)->sin6_addr.s6_addr32[0];
+        *addr_str = "IPv6 address";
+    }
+}
+
+static void pyr_cg_net_perms(struct pyr_lib_policy_db *lib_perm_db,
+                             const char *addr, u32 *lib_op) {
+
+    pyr_cg_node_t *callgraph = NULL;
+    u32 op = 0;
+
+    #ifdef PYR_TESTING
+    #if PYR_TESTING
+    if (init_callgraph("http", &callgraph)) {
+        PYR_ERROR("Net - Failed to create callgraph for %s\n", "http");
+        goto out;
+    }
+    #endif
+    #else
+    // TODO: implement upcall to language runtime for callstack
+    #endif
+
+    if (pyr_compute_lib_perms(lib_perm_db,
+                              callgraph,
+                              addr, &op)) {
+        PYR_ERROR("Net - Error verifying callgraph for %s\n", "http");
+        goto out;
+    }
+
+ out:
+    pyr_free_callgraph(&callgraph);
+    *lib_op = op;
+}
+
 /**
  * pyr_revalidate_sk - Revalidate access to a sock
  * @op: operation being checked
@@ -176,8 +244,8 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 	struct pyr_profile *profile;
 	int error = 0;
         unsigned short sock_family;
-        pyr_cg_node_t *callgraph = {};
         u32 lib_op;
+        const char *addr;
 
 	/* pyr_revalidate_sk should not be called from interrupt context
 	 * don't mediate these calls as they are not task related
@@ -187,46 +255,47 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 
 	profile = __pyr_current_profile();
 	if (!unconfined(profile)) {
-		error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
-				    sk->sk_protocol, sk);
+            error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
+                                 sk->sk_protocol, sk);
 
-                // Pyronia hook: check the call stack to determine
-                // if the requesting library has permissions to
-                // complete this operation
-                if (!error) {
-                    sock_family = sk->sk_family;
+            // Pyronia hook: check the call stack to determine
+            // if the requesting library has permissions to
+            // complete this operation
+            if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
+                sock_family = sk->sk_family;
 
-                    /* unix domain and netlink sockets are handled by ipc */
-                    if (sock_family == AF_UNIX || sock_family == AF_NETLINK)
-                        return 0;
+                /* unix domain and netlink sockets are handled by ipc */
+                if (sock_family == AF_UNIX || sock_family == AF_NETLINK)
+                    return 0;
 
-                    // FIXME: msm - support multi-threaded stack tracing
-                    request_callstack(&callgraph);
-
-                    // FIXME: this being a long may be potentially problematic
-                    // if we ever encounter an IPv6 address
-                    unsigned long addr = 0;
-                    if (sock_family == AF_INET) {
-                        addr = ((sockaddr_in)address).sin_addr;
+                // make sure we have an address to check
+                if (address == NULL) {
+                    PYR_ERROR("Net - No address to check\n");
+                    addr = "";
+                }
+                else {
+                    in_addr_to_str(address, &addr);
+                    if (addr == NULL) {
+                        PYR_ERROR("Net - Failed to convert IP address to string\n");
+                        addr = "";
                     }
-                    else if(sock_family == AF_INET6) {
-                        addr = ((sockaddr_in6)address).sin6_addr;
-                    }
-
-                    if (pyr_compute_lib_perms(profile->lib_perm_db, callgraph,
-                                         addr, &lib_op)) {
-                        error = -EACCESS;
-                    }
-
-                    // this checks if the requested operation is an exact match
-                    // to the effective library operation
-                    if (op & ~lib_op) {
-                        error = -EACCESS;
-                    }
-
-                    pyr_free_callgraph(&callgraph);
                 }
 
+                // compute the permissions
+                pyr_cg_net_perms(profile->lib_perm_db, addr,
+                                 &lib_op);
+
+                // this checks if the requested operation is an
+                // exact match to the effective library operation
+                if (op & ~lib_op) {
+                    PYR_ERROR("Net - Expected %d, got %d; addr: %s\n",  \
+                              lib_op, op, addr);
+                    error = -EACCES;
+                }
+                else {
+                    PYR_ERROR("Net - Operation allowed for %s\n", addr);
+                }
+            }
         }
 
 	return error;

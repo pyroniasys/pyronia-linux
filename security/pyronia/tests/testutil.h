@@ -3,9 +3,9 @@
  *@author Marcela S. Melara
  */
 
+#include "../include/userland_test.h"
 #include "../include/lib_policy.h"
 #include "../include/callgraph.h"
-#include "../include/userland_test.h"
 
 // represents different potential requested permissions
 // Only PERM1 & PERM1 are compatible because, following the same logic

@@ -1,0 +1,3 @@
+#!/bin/bash
+
+python $HOME/pyronia-linux/security/pyronia/tests/simple_tcp_server.py

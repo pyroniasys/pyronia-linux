@@ -1,0 +1,3 @@
+#!/bin/bash
+
+sudo pico /home/pyronia/pyronia-linux/security/pyronia/tests/home.pyronia.kernel_permissions_checker_test

@@ -1,0 +1,7 @@
+#!/bin/bash
+
+./get_parser
+./load_test_profile
+./restart_pyronia
+
+echo "Don't forget to start the test TCP server."

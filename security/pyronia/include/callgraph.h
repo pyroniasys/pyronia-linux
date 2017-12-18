@@ -34,6 +34,6 @@ int pyr_new_cg_node(pyr_cg_node_t **, const char *, enum pyr_data_types,
                     pyr_cg_node_t *);
 void pyr_free_callgraph(pyr_cg_node_t **);
 int pyr_compute_lib_perms(struct pyr_lib_policy_db *, pyr_cg_node_t *,
-                     const char *, uint32_t *);
+                     const char *, u32 *);
 
 #endif /* __PYR_CALLGRAPH_H */

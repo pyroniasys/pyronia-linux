@@ -167,6 +167,7 @@ struct pyr_file_rules {
 	/* TODO: add delegate table */
 };
 
+u32 map_old_perms(u32);
 unsigned int pyr_str_perms(struct pyr_dfa *dfa, unsigned int start,
 			  const char *name, struct path_cond *cond,
 			  struct file_perms *perms);

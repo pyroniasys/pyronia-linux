@@ -88,6 +88,11 @@
 #include "include/policy_unpack.h"
 #include "include/resource.h"
 
+#ifdef PYR_TESTING
+#if PYR_TESTING
+#include "include/kernel_test.h"
+#endif
+#endif
 
 /* root profile namespace */
 struct pyr_namespace *pyr_root_ns;
