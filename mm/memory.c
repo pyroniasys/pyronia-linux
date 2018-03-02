@@ -73,6 +73,10 @@
 #include <asm/tlbflush.h>
 #include <asm/pgtable.h>
 
+#include <linux/smv.h>
+#include <linux/memdom.h>
+#include <linux/smv_mm.h>
+
 #include "internal.h"
 
 #ifdef LAST_CPUPID_NOT_IN_PAGE_FLAGS
@@ -220,6 +224,7 @@ static bool tlb_next_batch(struct mmu_gather *tlb)
 void tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm, unsigned long start, unsigned long end)
 {
 	tlb->mm = mm;
+        tlb->smv_id = current->smv_id;
 
 	/* Is it from 0 to ~0? */
 	tlb->fullmm     = !(start | (end+1));
@@ -529,7 +534,15 @@ void free_pgd_range(struct mmu_gather *tlb,
 	if (addr > end - 1)
 		return;
 
-	pgd = pgd_offset(tlb->mm, addr);
+	/* Use the smv id recorded in tlb to free pgtables */
+	if (tlb->mm->using_smv) {
+            mutex_lock(&tlb->mm->smv_metadataMutex);
+            pgd = tlb->mm->pgd_smv[tlb->smv_id] + pgd_index(addr);
+            mutex_unlock(&tlb->mm->smv_metadataMutex);
+	} else{
+            pgd = pgd_offset(tlb->mm, addr);
+	}
+
 	do {
 		next = pgd_addr_end(addr, end);
 		if (pgd_none_or_clear_bad(pgd))
@@ -1291,7 +1304,13 @@ void unmap_page_range(struct mmu_gather *tlb,
 
 	BUG_ON(addr >= end);
 	tlb_start_vma(tlb, vma);
-	pgd = pgd_offset(vma->vm_mm, addr);
+	if ( tlb->mm->using_smv ) {
+            mutex_lock(&tlb->mm->smv_metadataMutex);
+            pgd = tlb->mm->pgd_smv[tlb->smv_id] + pgd_index(addr);
+            mutex_unlock(&tlb->mm->smv_metadataMutex);
+	} else{
+            pgd = pgd_offset(vma->vm_mm, addr);
+	}
 	do {
 		next = pgd_addr_end(addr, end);
 		if (pgd_none_or_clear_bad(pgd))
@@ -1393,6 +1412,10 @@ void zap_page_range(struct vm_area_struct *vma, unsigned long start,
 
 	lru_add_drain();
 	tlb_gather_mmu(&tlb, mm, start, end);
+        /* Update smv_id in tlb if the caller is madvise_dontneed() */
+	if (details) {
+		tlb.smv_id = details->smv_id;
+	}
 	update_hiwater_rss(mm);
 	mmu_notifier_invalidate_range_start(mm, start, end);
 	for ( ; vma && vma->vm_start < end; vma = vma->vm_next)
@@ -3158,8 +3181,9 @@ static int do_fault_around(struct fault_env *fe, pgoff_t start_pgoff)
 
 	/* check if the page fault is solved */
 	fe->pte -= (fe->address >> PAGE_SHIFT) - (address >> PAGE_SHIFT);
-	if (!pte_none(*fe->pte))
-		ret = VM_FAULT_NOPAGE;
+	if (!pte_none(*fe->pte)) {
+	  ret = VM_FAULT_NOPAGE;
+	}
 	pte_unmap_unlock(fe->pte, fe->ptl);
 out:
 	fe->address = address;
@@ -3185,15 +3209,16 @@ static int do_read_fault(struct fault_env *fe, pgoff_t pgoff)
 	}
 
 	ret = __do_fault(fe, pgoff, NULL, &fault_page, NULL);
-	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY)))
-		return ret;
-
+	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY))) {
+	  return ret;
+	}
+	
 	ret |= alloc_set_pte(fe, NULL, fault_page);
 	if (fe->pte)
 		pte_unmap_unlock(fe->pte, fe->ptl);
 	unlock_page(fault_page);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY)))
-		put_page(fault_page);
+	  put_page(fault_page);
 	return ret;
 }
 
@@ -3316,12 +3341,15 @@ static int do_fault(struct fault_env *fe)
 	pgoff_t pgoff = linear_page_index(vma, fe->address);
 
 	/* The VMA was not fully populated on mmap() or missing VM_DONTEXPAND */
-	if (!vma->vm_ops->fault)
-		return VM_FAULT_SIGBUS;
-	if (!(fe->flags & FAULT_FLAG_WRITE))
-		return do_read_fault(fe, pgoff);
-	if (!(vma->vm_flags & VM_SHARED))
-		return do_cow_fault(fe, pgoff);
+	if (!vma->vm_ops->fault) {
+	  return VM_FAULT_SIGBUS;
+	}
+	if (!(fe->flags & FAULT_FLAG_WRITE)) {
+	  return do_read_fault(fe, pgoff);
+	}
+	if (!(vma->vm_flags & VM_SHARED)) {
+	  return do_cow_fault(fe, pgoff);
+	}
 	return do_shared_fault(fe, pgoff);
 }
 
@@ -3487,6 +3515,8 @@ static int handle_pte_fault(struct fault_env *fe)
 		 * concurrent faults and from rmap lookups.
 		 */
 		fe->pte = NULL;
+		if (fe->vma->vm_mm->using_smv)
+		  slog(KERN_INFO, "[%s] fe->pmd is probably not none: addr 0x%16lx\n", __func__, fe->address);
 	} else {
 		/* See comment in pte_alloc_one_map() */
 		if (pmd_trans_unstable(fe->pmd) || pmd_devmap(*fe->pmd))
@@ -3513,30 +3543,58 @@ static int handle_pte_fault(struct fault_env *fe)
 		if (pte_none(entry)) {
 			pte_unmap(fe->pte);
 			fe->pte = NULL;
+			if (fe->vma->vm_mm->using_smv)
+			  slog(KERN_INFO, "[%s] entry is none: addr 0x%16lx\n", __func__, fe->address);
+
 		}
 	}
 
 	if (!fe->pte) {
-		if (vma_is_anonymous(fe->vma))
-			return do_anonymous_page(fe);
-		else
-			return do_fault(fe);
+            if (vma_is_anonymous(fe->vma)) {
+                if (fe->vma->vm_mm->using_smv) {
+                    slog(KERN_INFO, "[%s] addr 0x%16lx !fe->pte, calling do_anonymous_page\n", __func__, fe->address);
+                }
+                return do_anonymous_page(fe);
+            }
+            else {
+                 if (fe->vma->vm_mm->using_smv) {
+		   slog(KERN_INFO, "[%s] addr 0x%16lx !fe->pte, calling do_fault\n", __func__, fe->address);
+                 }
+		 return do_fault(fe);
+            }
 	}
 
-	if (!pte_present(entry))
-		return do_swap_page(fe, entry);
+	if (!pte_present(entry)) {
+             if (fe->vma->vm_mm->using_smv) {
+                 slog(KERN_INFO, "[%s] addr 0x%16lx not present\n", __func__, fe->address);
+                 slog(KERN_INFO, "[%s] addr 0x%16lx, calling do_swap_page\n", __func__, fe->address);
+             }
+             return do_swap_page(fe, entry);
+        }
 
-	if (pte_protnone(entry) && vma_is_accessible(fe->vma))
-		return do_numa_page(fe, entry);
+	if (pte_protnone(entry) && vma_is_accessible(fe->vma)) {
+            if (fe->vma->vm_mm->using_smv) {
+                slog(KERN_INFO, "[%s] addr 0x%16lx pte_protnone, calling do_numa_page\n", __func__, fe->address);
+            }
+            return do_numa_page(fe, entry);
+        }
 
 	fe->ptl = pte_lockptr(fe->vma->vm_mm, fe->pmd);
 	spin_lock(fe->ptl);
-	if (unlikely(!pte_same(*fe->pte, entry)))
-		goto unlock;
+	if (unlikely(!pte_same(*fe->pte, entry))) {
+            if (fe->vma->vm_mm->using_smv) {
+                slog(KERN_INFO, "[%s] addr 0x%16lx !pte_same, pte_val(*pte) 0x%16lx\n", __func__, fe->address, pte_val(*(fe->pte)));
+            }
+            goto unlock;
+        }
 	if (fe->flags & FAULT_FLAG_WRITE) {
-		if (!pte_write(entry))
-			return do_wp_page(fe, entry);
-		entry = pte_mkdirty(entry);
+            if (!pte_write(entry)) {
+                if (fe->vma->vm_mm->using_smv) {
+		  slog(KERN_INFO, "[%s] addr 0x%16lx !pte_write, calling do_wp_page\n", __func__, fe->address);
+                }
+                return do_wp_page(fe, entry);
+            }
+	    entry = pte_mkdirty(entry);
 	}
 	entry = pte_mkyoung(entry);
 	if (ptep_set_access_flags(fe->vma, fe->address, fe->pte, entry,
@@ -3563,8 +3621,8 @@ unlock:
  * The mmap_sem may have been released depending on flags and our
  * return value.  See filemap_fault() and __lock_page_or_retry().
  */
-static int __handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
-		unsigned int flags)
+static int __handle_mm_fault(struct vm_area_struct *vma,
+                             unsigned long address, unsigned int flags)
 {
 	struct fault_env fe = {
 		.vma = vma,
@@ -3575,39 +3633,90 @@ static int __handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	pgd_t *pgd;
 	pud_t *pud;
 
-	pgd = pgd_offset(mm, address);
+        int rv = 0;
+
+        /* SMV threads should use main thread's pgd to record fault.
+	 * Pthreads (smv_id == -1) should still use pgd_offset
+	 */
+	if (mm->using_smv && current->smv_id >= MAIN_THREAD) {
+            pgd = pgd_offset_smv(mm, fe.address, MAIN_THREAD);
+	} else {
+            pgd = pgd_offset(mm, address);
+	}
 	pud = pud_alloc(mm, pgd, address);
-	if (!pud)
-		return VM_FAULT_OOM;
+	if (!pud) {
+            rv = VM_FAULT_OOM;
+            goto out;
+        }
 	fe.pmd = pmd_alloc(mm, pud, address);
-	if (!fe.pmd)
-		return VM_FAULT_OOM;
+	if (!fe.pmd) {
+            rv = VM_FAULT_OOM;
+            goto out;
+        }
 	if (pmd_none(*fe.pmd) && transparent_hugepage_enabled(vma)) {
 		int ret = create_huge_pmd(&fe);
-		if (!(ret & VM_FAULT_FALLBACK))
-			return ret;
+		if (!(ret & VM_FAULT_FALLBACK)) {
+                    rv = ret;
+                    goto out;
+                }
 	} else {
 		pmd_t orig_pmd = *fe.pmd;
 		int ret;
 
 		barrier();
 		if (pmd_trans_huge(orig_pmd) || pmd_devmap(orig_pmd)) {
-			if (pmd_protnone(orig_pmd) && vma_is_accessible(vma))
-				return do_huge_pmd_numa_page(&fe, orig_pmd);
-
-			if ((fe.flags & FAULT_FLAG_WRITE) &&
-					!pmd_write(orig_pmd)) {
-				ret = wp_huge_pmd(&fe, orig_pmd);
-				if (!(ret & VM_FAULT_FALLBACK))
-					return ret;
-			} else {
-				huge_pmd_set_accessed(&fe, orig_pmd);
-				return 0;
-			}
+                    if (pmd_protnone(orig_pmd) && vma_is_accessible(vma)) {
+                        rv = do_huge_pmd_numa_page(&fe, orig_pmd);
+                        goto out;
+                    }
+                    if ((fe.flags & FAULT_FLAG_WRITE) &&
+                        !pmd_write(orig_pmd)) {
+                        ret = wp_huge_pmd(&fe, orig_pmd);
+                        if (!(ret & VM_FAULT_FALLBACK)) {
+                            rv = ret;
+                            goto out;
+                        }
+                    } else {
+                        huge_pmd_set_accessed(&fe, orig_pmd);
+                        rv = 0;
+                        goto out;
+                    }
 		}
 	}
 
-	return handle_pte_fault(&fe);
+	rv = handle_pte_fault(&fe);
+
+ out:
+        /* SMV threads should copy the pgtables from the main thread
+	 * Pthreads (smv_id == -1) should still use pgd_offset
+	 */
+	if (mm->using_smv && current->smv_id >= MAIN_THREAD) {
+            /* Only copy page table to current smv if
+               handle_pte_fault succeeds (this includes a page fault
+	       where the pte was allocated). MAIN_THREAD will return
+               immediately as it doesn't have to copy its own pgtables. */
+            if (rv == 0 || rv == VM_FAULT_NOPAGE) {
+                /* FIXME: just pass pte to copy_pgtable_smv? */
+                copy_pgtable_smv(current->smv_id, MAIN_THREAD,
+                                 address, fe.flags, vma);
+            }
+
+            if (rv == 0 || rv == VM_FAULT_NOPAGE) {
+	      slog(KERN_INFO, "[%s] addr 0x%16lx done\n", __func__, address);
+            }
+            else {
+	      slog(KERN_INFO, "[%s] addr 0x%16lx failed\n", __func__, address);
+            }
+            if ( current->smv_id == MAIN_THREAD) {
+                slog(KERN_INFO, "[%s] smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx\n",
+                     __func__, current->smv_id, pgd_val(*pgd), pud_val(*pud), pmd_val(*fe.pmd));
+            }
+            slog(KERN_INFO, "[%s] cr3: 0x%16lx, smv %d: mm->pgd: %p, mm->pgd_smv[%d]: %p, mm->pgd_smv[MAIN_THREAD]: %p\n",
+                 __func__, read_cr3(), current->smv_id, mm->pgd,
+                 current->smv_id, mm->pgd_smv[current->smv_id],
+                 mm->pgd_smv[MAIN_THREAD]);
+	}
+        return rv;
 }
 
 /*

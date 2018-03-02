@@ -89,6 +89,9 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/task.h>
 
+#include <linux/smv.h>
+#include <linux/memdom.h>
+
 /*
  * Minimum number of threads to boot the kernel
  */
@@ -600,6 +603,23 @@ static void mm_init_owner(struct mm_struct *mm, struct task_struct *p)
 
 static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 {
+    atomic_set(&mm->num_smvs, 0);
+    atomic_set(&mm->num_memdoms, 0);
+    /* No smv is allocated yet */
+    bitmap_zero(mm->smv_bitmapInUse, SMV_ARRAY_SIZE);
+    /* No memdom is allocated yet */
+    bitmap_zero(mm->memdom_bitmapInUse, SMV_ARRAY_SIZE);
+    /* Initialize mutex that protects smvs */
+    mutex_init(&mm->smv_metadataMutex);
+    /* If the first element is NULL, then no smv is created yet */
+    memset(mm->smv_metadata, 0, sizeof(struct smv_struct*)*SMV_ARRAY_SIZE);
+    /* If the first element is NULL, then no memdom is created yet */
+    memset(mm->memdom_metadata, 0,
+           sizeof(struct memdom_struct*)*SMV_ARRAY_SIZE);
+    memset(mm->pgd_smv, 0, sizeof(pgd_t)*SMV_ARRAY_SIZE);
+    mm->using_smv = 0;
+    mm->standby_smv_id = -1;
+
 	mm->mmap = NULL;
 	mm->mm_rb = RB_ROOT;
 	mm->vmacache_seqnum = 0;
@@ -650,6 +670,9 @@ fail_nopgd:
 static void check_mm(struct mm_struct *mm)
 {
 	int i;
+        if (mm->using_smv) {
+            slog(KERN_INFO, "[%s] %s smv %d checking mm %p\n", __func__, current->comm, current->smv_id, mm);
+	}
 
 	for (i = 0; i < NR_MM_COUNTERS; i++) {
 		long x = atomic_long_read(&mm->rss_stat.count[i]);
@@ -693,6 +716,9 @@ struct mm_struct *mm_alloc(void)
  */
 void __mmdrop(struct mm_struct *mm)
 {
+    if (mm->using_smv) {
+        slog(KERN_INFO, "[%s] %s in smv %d mm: %p\n", __func__, current->comm, current->smv_id, mm);
+    }
 	BUG_ON(mm == &init_mm);
 	mm_free_pgd(mm);
 	destroy_context(mm);
@@ -1470,6 +1496,15 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	p->sequential_io	= 0;
 	p->sequential_io_avg	= 0;
 #endif
+        /* Get smv_id if any stored in mm */
+	if (current->mm) {
+            // Could be -1 if it's not smv thread
+            p->smv_id = current->mm->standby_smv_id;
+	} else {
+            p->smv_id = -1;
+	}
+        /* Initialize mmap_memdom_id to -1 */
+	p->mmap_memdom_id = -1;
 
 	/* Perform scheduler related setup. Assign this task to a CPU. */
 	retval = sched_fork(clone_flags, p);
@@ -1817,6 +1852,19 @@ long _do_fork(unsigned long clone_flags,
 	} else {
 		nr = PTR_ERR(p);
 	}
+
+        /* Reset smv_id for smv_thread_create and assign smv_id
+           to the child task p.
+           User space guarantees the atomic operation of
+           forking smv threads */
+        if (current->mm) {
+            if (current->mm->standby_smv_id != -1) {
+                slog(KERN_INFO, "[%s] forked smv thread running in smv %d\n", __func__, current->mm->standby_smv_id);
+                p->smv_id = current->mm->standby_smv_id;
+                current->mm->standby_smv_id = -1;
+            }
+	}
+
 	return nr;
 }
 

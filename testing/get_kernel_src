@@ -1,5 +1,0 @@
-#!/bin/bash
-
-git clone git@github.com:masomel/pyronia-linux.git
-cd pyronia-linux
-git checkout e2e-checker-tests

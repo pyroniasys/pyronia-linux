@@ -1,4 +1,4 @@
 #!/bin/bash
 
-sudo cp /home/pyronia/pyronia-linux/security/pyronia/tests/home.pyronia.kernel_permissions_checker_test /etc/pyronia.d
+sudo cp /home/pyronia/libpyronia/libraries/libapparmor/testsuite/home.pyronia.kernel_permissions_checker_test /etc/pyronia.d
 sudo apparmor_parser -r /etc/pyronia.d/home.pyronia.kernel_permissions_checker_test

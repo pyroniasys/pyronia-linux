@@ -1,6 +1,5 @@
 #!/bin/bash
 
-./get_parser
 ./load_test_profile
 ./restart_pyronia
 

@@ -1,6 +1,32 @@
 #!/bin/bash
 
-cd /home/pyronia/pyronia-linux
-git pull
-make O=/home/pyronia/build/kernel
-sudo make O=/home/pyronia/build/kernel modules_install install
+KERNEL_SRC=/home/pyronia/pyronia-linux
+BUILD=/home/pyronia/build/kernel
+
+cd $KERNEL_SRC
+make O=$BUILD ARCH=x86_64 menuconfig
+
+echo "===================== [x64-kernel] Compiling kernel image.  ====================="
+make O=$BUILD ARCH=x86_64;
+if [ $? -eq 0 ]; then
+    echo " ====================== Kernel compiled successfully. =========================="
+else
+    echo " ====================== Kernel failed to compile, check error messages. error code: $? ========================"
+    exit $?
+fi
+
+sudo make O=$BUILD ARCH=x86_64 modules_install;
+if [ $? -eq 0 ]; then
+    echo " ================== kernel modules installed successfully. ======================"
+else
+    echo " ================== kernel modules failed to install, check error messages. error code: $? =============="
+    exit $?
+fi
+
+sudo make O=$BUILD ARCH=x86_64 install;
+if [ $? -eq 0 ]; then
+    echo " ================== kernel image installed successfully. ======================"
+else
+    echo " ================== kernel image failed to install, check error messages. error code: $? =============="
+    exit $?
+fi

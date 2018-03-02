@@ -15,6 +15,9 @@
 #include <linux/workqueue.h>
 #include <asm/page.h>
 #include <asm/mmu.h>
+#include <linux/smv_mm.h>
+#include <linux/smv.h>
+#include <linux/memdom.h>
 
 #ifndef AT_VECTOR_SIZE_ARCH
 #define AT_VECTOR_SIZE_ARCH 0
@@ -358,6 +361,7 @@ struct vm_area_struct {
 	struct mempolicy *vm_policy;	/* NUMA policy for the VMA */
 #endif
 	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
+    int memdom_id; /* Record which memdom does this vma belong to */
 };
 
 struct core_thread {
@@ -394,110 +398,137 @@ struct mm_rss_stat {
 
 struct kioctx_table;
 struct mm_struct {
-	struct vm_area_struct *mmap;		/* list of VMAs */
-	struct rb_root mm_rb;
-	u32 vmacache_seqnum;                   /* per-thread vmacache */
+    /* Additional fields to support the secure memory view model */
+    atomic_t num_smvs; /* number of smvs the current process has */
+    atomic_t num_memdoms; /* number of memdoms the current process has */
+    /* Bitmap of memdoms in use.  set to 1 if memdom[i] is in use,
+       0 otherwise. */
+    DECLARE_BITMAP(memdom_bitmapInUse, SMV_ARRAY_SIZE);
+    /* Bitmap of smvs in use.  set to 1 if smv[i] is in use,
+       0 otherwise. */
+    DECLARE_BITMAP(smv_bitmapInUse, SMV_ARRAY_SIZE);
+    /* Bookkeeping of per-process memory domains info */
+    struct memdom_struct *memdom_metadata[SMV_ARRAY_SIZE];
+    /* Bookkeeping of per-process smv info */
+    struct smv_struct *smv_metadata[SMV_ARRAY_SIZE];
+    /* mutex protecting memdom/smv_metadata and memdom/smv_bitmap */
+    struct mutex smv_metadataMutex;
+    /* set to 1 if current mm is using the secure memory view model */
+    int using_smv;
+    /* For smv_thread_create to tell the kernel what smv
+       an about-to-run thread will be running in */
+    int standby_smv_id;
+
+    struct vm_area_struct *mmap;		/* list of VMAs */
+    struct rb_root mm_rb;
+    u32 vmacache_seqnum;                   /* per-thread vmacache */
 #ifdef CONFIG_MMU
-	unsigned long (*get_unmapped_area) (struct file *filp,
-				unsigned long addr, unsigned long len,
-				unsigned long pgoff, unsigned long flags);
+    unsigned long (*get_unmapped_area) (struct file *filp,
+                                        unsigned long addr, unsigned long len,
+                                        unsigned long pgoff, unsigned long flags);
 #endif
-	unsigned long mmap_base;		/* base of mmap area */
-	unsigned long mmap_legacy_base;         /* base of mmap area in bottom-up allocations */
-	unsigned long task_size;		/* size of task vm space */
-	unsigned long highest_vm_end;		/* highest vma end address */
-	pgd_t * pgd;
-	atomic_t mm_users;			/* How many users with user space? */
-	atomic_t mm_count;			/* How many references to "struct mm_struct" (users count as 1) */
-	atomic_long_t nr_ptes;			/* PTE page table pages */
+    unsigned long mmap_base;		/* base of mmap area */
+    unsigned long mmap_legacy_base;         /* base of mmap area in bottom-up allocations */
+    unsigned long task_size;		/* size of task vm space */
+    unsigned long highest_vm_end;		/* highest vma end address */
+    pgd_t *pgd;
+    /* Page table used by smv threads.
+       Index at MAX_SMV-th pgd is for main thread */
+    pgd_t *pgd_smv[SMV_ARRAY_SIZE];
+    atomic_t mm_users;			/* How many users with user space? */
+    atomic_t mm_count;			/* How many references to "struct mm_struct" (users count as 1) */
+    atomic_long_t nr_ptes;			/* PTE page table pages */
 #if CONFIG_PGTABLE_LEVELS > 2
-	atomic_long_t nr_pmds;			/* PMD page table pages */
+    atomic_long_t nr_pmds;			/* PMD page table pages */
 #endif
-	int map_count;				/* number of VMAs */
+    int map_count;				/* number of VMAs */
 
-	spinlock_t page_table_lock;		/* Protects page tables and some counters */
-	struct rw_semaphore mmap_sem;
+    spinlock_t page_table_lock;		/* Protects page tables and some counters */
+    /* Protects page tables and some counters for smvs.
+       Index at MAX_SMV-th pgd is for main thread  */
+    spinlock_t page_table_lock_smv[SMV_ARRAY_SIZE];
+    struct rw_semaphore mmap_sem;
 
-	struct list_head mmlist;		/* List of maybe swapped mm's.	These are globally strung
-						 * together off init_mm.mmlist, and are protected
-						 * by mmlist_lock
-						 */
+    struct list_head mmlist;		/* List of maybe swapped mm's.	These are globally strung
+                                         * together off init_mm.mmlist, and are protected
+                                         * by mmlist_lock
+                                         */
 
 
-	unsigned long hiwater_rss;	/* High-watermark of RSS usage */
-	unsigned long hiwater_vm;	/* High-water virtual memory usage */
+    unsigned long hiwater_rss;	/* High-watermark of RSS usage */
+    unsigned long hiwater_vm;	/* High-water virtual memory usage */
 
-	unsigned long total_vm;		/* Total pages mapped */
-	unsigned long locked_vm;	/* Pages that have PG_mlocked set */
-	unsigned long pinned_vm;	/* Refcount permanently increased */
-	unsigned long data_vm;		/* VM_WRITE & ~VM_SHARED & ~VM_STACK */
-	unsigned long exec_vm;		/* VM_EXEC & ~VM_WRITE & ~VM_STACK */
-	unsigned long stack_vm;		/* VM_STACK */
-	unsigned long def_flags;
-	unsigned long start_code, end_code, start_data, end_data;
-	unsigned long start_brk, brk, start_stack;
-	unsigned long arg_start, arg_end, env_start, env_end;
+    unsigned long total_vm;		/* Total pages mapped */
+    unsigned long locked_vm;	/* Pages that have PG_mlocked set */
+    unsigned long pinned_vm;	/* Refcount permanently increased */
+    unsigned long data_vm;		/* VM_WRITE & ~VM_SHARED & ~VM_STACK */
+    unsigned long exec_vm;		/* VM_EXEC & ~VM_WRITE & ~VM_STACK */
+    unsigned long stack_vm;		/* VM_STACK */
+    unsigned long def_flags;
+    unsigned long start_code, end_code, start_data, end_data;
+    unsigned long start_brk, brk, start_stack;
+    unsigned long arg_start, arg_end, env_start, env_end;
 
-	unsigned long saved_auxv[AT_VECTOR_SIZE]; /* for /proc/PID/auxv */
+    unsigned long saved_auxv[AT_VECTOR_SIZE]; /* for /proc/PID/auxv */
 
-	/*
-	 * Special counters, in some configurations protected by the
-	 * page_table_lock, in other configurations by being atomic.
-	 */
-	struct mm_rss_stat rss_stat;
+    /*
+     * Special counters, in some configurations protected by the
+     * page_table_lock, in other configurations by being atomic.
+     */
+    struct mm_rss_stat rss_stat;
 
-	struct linux_binfmt *binfmt;
+    struct linux_binfmt *binfmt;
 
-	cpumask_var_t cpu_vm_mask_var;
+    cpumask_var_t cpu_vm_mask_var;
 
-	/* Architecture-specific MM context */
-	mm_context_t context;
+    /* Architecture-specific MM context */
+    mm_context_t context;
 
-	unsigned long flags; /* Must use atomic bitops to access the bits */
+    unsigned long flags; /* Must use atomic bitops to access the bits */
 
-	struct core_state *core_state; /* coredumping support */
+    struct core_state *core_state; /* coredumping support */
 #ifdef CONFIG_AIO
-	spinlock_t			ioctx_lock;
-	struct kioctx_table __rcu	*ioctx_table;
+    spinlock_t			ioctx_lock;
+    struct kioctx_table __rcu	*ioctx_table;
 #endif
 #ifdef CONFIG_MEMCG
-	/*
-	 * "owner" points to a task that is regarded as the canonical
-	 * user/owner of this mm. All of the following must be true in
-	 * order for it to be changed:
-	 *
-	 * current == mm->owner
-	 * current->mm != mm
+    /*
+     * "owner" points to a task that is regarded as the canonical
+     * user/owner of this mm. All of the following must be true in
+     * order for it to be changed:
+     *
+     * current == mm->owner
+     * current->mm != mm
 	 * new_owner->mm == mm
 	 * new_owner->alloc_lock is held
 	 */
 	struct task_struct __rcu *owner;
 #endif
 
-	/* store ref to file /proc/<pid>/exe symlink points to */
-	struct file __rcu *exe_file;
+    /* store ref to file /proc/<pid>/exe symlink points to */
+    struct file __rcu *exe_file;
 #ifdef CONFIG_MMU_NOTIFIER
-	struct mmu_notifier_mm *mmu_notifier_mm;
+    struct mmu_notifier_mm *mmu_notifier_mm;
 #endif
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) && !USE_SPLIT_PMD_PTLOCKS
-	pgtable_t pmd_huge_pte; /* protected by page_table_lock */
+    pgtable_t pmd_huge_pte; /* protected by page_table_lock */
 #endif
 #ifdef CONFIG_CPUMASK_OFFSTACK
-	struct cpumask cpumask_allocation;
+    struct cpumask cpumask_allocation;
 #endif
 #ifdef CONFIG_NUMA_BALANCING
-	/*
-	 * numa_next_scan is the next time that the PTEs will be marked
-	 * pte_numa. NUMA hinting faults will gather statistics and migrate
-	 * pages to new nodes if necessary.
-	 */
-	unsigned long numa_next_scan;
+    /*
+     * numa_next_scan is the next time that the PTEs will be marked
+     * pte_numa. NUMA hinting faults will gather statistics and migrate
+     * pages to new nodes if necessary.
+     */
+    unsigned long numa_next_scan;
 
-	/* Restart point for scanning and setting pte_numa */
-	unsigned long numa_scan_offset;
+    /* Restart point for scanning and setting pte_numa */
+    unsigned long numa_scan_offset;
 
-	/* numa_scan_seq prevents two threads setting pte_numa */
-	int numa_scan_seq;
+    /* numa_scan_seq prevents two threads setting pte_numa */
+    int numa_scan_seq;
 #endif
 #if defined(CONFIG_NUMA_BALANCING) || defined(CONFIG_COMPACTION)
 	/*
@@ -507,16 +538,16 @@ struct mm_struct {
 	 */
 	bool tlb_flush_pending;
 #endif
-	struct uprobes_state uprobes_state;
+    struct uprobes_state uprobes_state;
 #ifdef CONFIG_X86_INTEL_MPX
-	/* address of the bounds directory */
-	void __user *bd_addr;
+    /* address of the bounds directory */
+    void __user *bd_addr;
 #endif
 #ifdef CONFIG_HUGETLB_PAGE
-	atomic_long_t hugetlb_usage;
+    atomic_long_t hugetlb_usage;
 #endif
 #ifdef CONFIG_MMU
-	struct work_struct async_put_work;
+    struct work_struct async_put_work;
 #endif
 };
 

@@ -21,6 +21,7 @@
 #include <linux/swap.h>
 #include <linux/swapops.h>
 #include <linux/mmu_notifier.h>
+#include <linux/smv_mm.h>
 
 #include <asm/tlb.h>
 
@@ -471,12 +472,28 @@ static long madvise_dontneed(struct vm_area_struct *vma,
 			     struct vm_area_struct **prev,
 			     unsigned long start, unsigned long end)
 {
-	*prev = vma;
-	if (vma->vm_flags & (VM_LOCKED|VM_HUGETLB|VM_PFNMAP))
-		return -EINVAL;
+    struct zap_details zap;
+    struct mm_struct *mm = current->mm;
+    *prev = vma;
+    if (vma->vm_flags & (VM_LOCKED|VM_HUGETLB|VM_PFNMAP))
+        return -EINVAL;
 
-	zap_page_range(vma, start, end - start, NULL);
-	return 0;
+    if ( mm->using_smv ) {
+        memset(&zap, 0, sizeof(struct zap_details));
+        zap.smv_id = -1;
+        /* Call zap_page_range for all smvs */
+        do {
+            zap.smv_id = find_next_bit(mm->smv_bitmapInUse, SMV_ARRAY_SIZE, (zap.smv_id+1));
+            if (zap.smv_id != SMV_ARRAY_SIZE) {
+                slog(KERN_INFO, "[%s] smv %d [0x%16lx to 0x%16lx]\n", __func__, zap.smv_id, start, end);
+                zap_page_range(vma, start, end - start, &zap);
+            }
+        } while (zap.smv_id != SMV_ARRAY_SIZE);
+    }
+    else {
+        zap_page_range(vma, start, end - start, NULL);
+    }
+    return 0;
 }
 
 /*

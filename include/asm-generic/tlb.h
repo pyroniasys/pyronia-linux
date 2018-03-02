@@ -90,29 +90,30 @@ struct mmu_gather_batch {
  * any data needed by arch specific code for tlb_remove_page.
  */
 struct mmu_gather {
-	struct mm_struct	*mm;
+    struct mm_struct	*mm;
+    int smv_id;
 #ifdef CONFIG_HAVE_RCU_TABLE_FREE
-	struct mmu_table_batch	*batch;
+    struct mmu_table_batch	*batch;
 #endif
-	unsigned long		start;
-	unsigned long		end;
-	/* we are in the middle of an operation to clear
-	 * a full mm and can make some optimizations */
-	unsigned int		fullmm : 1,
-	/* we have performed an operation which
-	 * requires a complete flush of the tlb */
-				need_flush_all : 1;
+    unsigned long		start;
+    unsigned long		end;
+    /* we are in the middle of an operation to clear
+     * a full mm and can make some optimizations */
+    unsigned int		fullmm : 1,
+    /* we have performed an operation which
+     * requires a complete flush of the tlb */
+        need_flush_all : 1;
 
-	struct mmu_gather_batch *active;
-	struct mmu_gather_batch	local;
-	struct page		*__pages[MMU_GATHER_BUNDLE];
-	unsigned int		batch_count;
-	/*
-	 * __tlb_adjust_range  will track the new addr here,
-	 * that that we can adjust the range after the flush
-	 */
-	unsigned long addr;
-	int page_size;
+    struct mmu_gather_batch *active;
+    struct mmu_gather_batch	local;
+    struct page		*__pages[MMU_GATHER_BUNDLE];
+    unsigned int		batch_count;
+    /*
+     * __tlb_adjust_range  will track the new addr here,
+     * that that we can adjust the range after the flush
+     */
+    unsigned long addr;
+    int page_size;
 };
 
 #define HAVE_GENERIC_MMU_GATHER

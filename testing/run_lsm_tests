@@ -1,10 +1,11 @@
 #!/bin/bash
 
-SRCDIR=$HOME/pyronia-linux/security/pyronia/tests
+E2ETESTS=$HOME/libpyronia/libraries/libapparmor/testsuite
+UNITTESTS=$HOME/pyronia-linux/security/pyronia/tests
 
 touch /tmp/cam0
 touch /tmp/cam1
-gcc -o $HOME/kernel_permissions_checker_test $SRCDIR/kernel_permissions_checker.c
+gcc -o $HOME/kernel_permissions_checker_test $E2ETESTS/kernel_permissions_checker.c
 cd $HOME
 
 echo "*** Running End-to-End Kernel Tests***"
@@ -15,7 +16,7 @@ echo ""
 echo "*** Running Unit Tests ***"
 
 ln -s asm-generic $HOME/pyronia-linux/include/asm
-cd $SRCDIR
+cd $UNITTESTS
 make; make test
 make clean
 rm $HOME/pyronia-linux/include/asm

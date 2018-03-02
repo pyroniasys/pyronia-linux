@@ -182,6 +182,7 @@ extern unsigned int kobjsize(const void *objp);
 #define VM_ACCOUNT	0x00100000	/* Is a VM accounted object */
 #define VM_NORESERVE	0x00200000	/* should the VM suppress accounting */
 #define VM_HUGETLB	0x00400000	/* Huge TLB Page VM */
+#define VM_MEMDOM       0x00800000      /* Protected by memory domains */
 #define VM_ARCH_1	0x01000000	/* Architecture-specific flag */
 #define VM_ARCH_2	0x02000000
 #define VM_DONTDUMP	0x04000000	/* Do not include in the core dump */
@@ -1168,11 +1169,12 @@ extern void user_shm_unlock(size_t, struct user_struct *);
  * Parameter block passed down to zap_pte_range in exceptional cases.
  */
 struct zap_details {
-	struct address_space *check_mapping;	/* Check page->mapping if set */
-	pgoff_t	first_index;			/* Lowest page->index to unmap */
-	pgoff_t last_index;			/* Highest page->index to unmap */
-	bool ignore_dirty;			/* Ignore dirty pages */
-	bool check_swap_entries;		/* Check also swap entries */
+    struct address_space *check_mapping;	/* Check page->mapping if set */
+    pgoff_t	first_index;			/* Lowest page->index to unmap */
+    pgoff_t last_index;			/* Highest page->index to unmap */
+    bool ignore_dirty;			/* Ignore dirty pages */
+    bool check_swap_entries;		/* Check also swap entries */
+    int smv_id;                         /* Indicate which smv's page tables zap_page_range() is working on */
 };
 
 struct page *vm_normal_page(struct vm_area_struct *vma, unsigned long addr,
@@ -1677,7 +1679,12 @@ static inline void pte_lock_deinit(struct page *page)
  */
 static inline spinlock_t *pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
 {
-	return &mm->page_table_lock;
+    if (mm->using_smv) {
+        return &mm->page_table_lock_smv[current->smv_id];
+    }
+    else {
+        return &mm->page_table_lock;
+    }
 }
 static inline void ptlock_cache_init(void) {}
 static inline bool ptlock_init(struct page *page) { return true; }

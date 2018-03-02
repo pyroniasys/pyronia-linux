@@ -111,7 +111,12 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 * ordering guarantee we need.
 		 *
 		 */
-		load_cr3(next->pgd);
+                if (next->using_smv && tsk->smv_id != MAIN_THREAD) {
+                    load_cr3(next->pgd_smv[tsk->smv_id]);
+                }
+                else {
+                    load_cr3(next->pgd);
+                }
 
 		trace_tlb_flush(TLB_FLUSH_ON_TASK_SWITCH, TLB_FLUSH_ALL);
 
@@ -143,7 +148,10 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		this_cpu_write(cpu_tlbstate.state, TLBSTATE_OK);
 		BUG_ON(this_cpu_read(cpu_tlbstate.active_mm) != next);
 
-		if (!cpumask_test_cpu(cpu, mm_cpumask(next))) {
+                /* Context switch for smv threads even if mm is
+                   the same one (for new pgtables) */
+		if (!cpumask_test_cpu(cpu, mm_cpumask(next)) ||
+                    (next->using_smv)) {
 			/*
 			 * On established mms, the mm_cpumask is only changed
 			 * from irq context, from ptep_clear_flush() while in
@@ -160,7 +168,12 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			 * As above, load_cr3() is serializing and orders TLB
 			 * fills with respect to the mm_cpumask write.
 			 */
-			load_cr3(next->pgd);
+                        if (next->using_smv && tsk->smv_id != MAIN_THREAD) {
+                            load_cr3(next->pgd_smv[tsk->smv_id]);
+                        }
+                        else {
+                            load_cr3(next->pgd);
+                        }
 			trace_tlb_flush(TLB_FLUSH_ON_TASK_SWITCH, TLB_FLUSH_ALL);
 			load_mm_cr4(next);
 			load_mm_ldt(next);
