@@ -972,13 +972,12 @@ struct vm_area_struct *vma_merge(struct mm_struct *mm,
 	if ( vm_flags & VM_MEMDOM ||
              (prev && (prev->vm_flags & VM_MEMDOM)) ||
              (next && (next->vm_flags & VM_MEMDOM))) {
-            slog(KERN_INFO, "[%s] smv %d skip merging VM_MEMDOM vma\n", __func__, current->smv_id);
-            slog(KERN_INFO, "[%s] smv %d prev->vm_start: 0x%16lx to prev->vm_end: 0x%16lx, prev->memdom_id: %d\n",
-                   __func__, current->smv_id, prev->vm_start,
-                   prev->vm_end, prev->memdom_id);
+	  //slog(KERN_INFO, "[%s] smv %d skip merging VM_MEMDOM vma\n", __func__, current->smv_id);
+	    /*if (prev)
+	      slog(KERN_INFO, "[%s] smv %d prev->vm_start: 0x%16lx to prev->vm_end: 0x%16lx, prev->memdom_id: %d\n", __func__, current->smv_id, prev->vm_start, prev->vm_end, prev->memdom_id);
             slog(KERN_INFO, "[%s] smv %d next->vm_start: 0x%16lx to next->vm_end: 0x%16lx, next->memdom_id: %d\n",
                    __func__, current->smv_id, next->vm_start,
-                   next->vm_end, next->memdom_id);
+                   next->vm_end, next->memdom_id);*/
             return NULL;
 	}
 
@@ -1178,6 +1177,16 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	if (!len)
 		return -EINVAL;
 
+	/* If we're running in an SMV and the user application has registered
+	 * an mmap, ignore the protections we're getting from userspace, 
+	 * and set prot to the current SMV's
+         * page protection for the mmap_memdom_id. 
+	 * This will ensure that any access to memory will trigger
+	 * a page fault. */
+	if (mm->using_smv && current->mmap_memdom_id > MAIN_THREAD) {
+            prot = memdom_get_pgprot(current->mmap_memdom_id, current->smv_id);
+	}
+	
 	/*
 	 * Does the application expect PROT_READ to imply PROT_EXEC?
 	 *
@@ -1223,7 +1232,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	 */
 	vm_flags |= calc_vm_prot_bits(prot, pkey) | calc_vm_flag_bits(flags) |
 			mm->def_flags | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
-
+	
 	if (flags & MAP_LOCKED)
 		if (!can_do_mlock())
 			return -EPERM;
@@ -1527,15 +1536,17 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	vma->vm_pgoff = pgoff;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
 
+	if (vma->vm_mm->using_smv) {
+	  slog(KERN_INFO, "[%s] vm protection %lu\n",
+	       __func__, pgprot_val(vma->vm_page_prot));
+	}
+	
         /* Set memdom_id correctly.
 	 * User space call memdom_mmap_register to store
          memdom_id for mmap in current */
         if ( vm_flags & VM_MEMDOM ) {
             vma->memdom_id = current->mmap_memdom_id;
             current->mmap_memdom_id = -1; // reset to -1
-            slog(KERN_INFO, "[%s] smv %d allocated vma in memdom %d [0x%16lx - 0x%16lx)\n",
-                   __func__, current->smv_id, vma->memdom_id,
-                   vma->vm_start, vma->vm_end);
 	}
         else {
             vma->memdom_id = MAIN_THREAD;
@@ -1615,6 +1626,12 @@ out:
 
 	vma_set_page_prot(vma);
 
+	if (vma->vm_mm->using_smv) {
+	  slog(KERN_INFO, "[%s] smv %d allocated vma in memdom %d [0x%16lx - 0x%16lx) with protection %lu\n",
+                   __func__, current->smv_id, vma->memdom_id,
+		 vma->vm_start, vma->vm_end, pgprot_val(vma->vm_page_prot)&(PROT_READ|PROT_WRITE|PROT_EXEC|PROT_NONE));
+	}
+	
 	return addr;
 
 unmap_and_free_vma:

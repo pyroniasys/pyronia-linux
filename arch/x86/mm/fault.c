@@ -1127,6 +1127,13 @@ access_error(unsigned long error_code, struct vm_area_struct *vma)
 {
         /* This is only called for the current mm, so: */
         bool foreign = false;
+
+	/* Make sure we return no error if the vma is memdom protected */
+	if (vma->vm_flags & VM_MEMDOM) {
+	  slog(KERN_INFO, "[%s] vma starting at 0x%16lx is memdom protected, checking if valid SMV fault with error code %lu\n", __func__, vma->vm_start, error_code);
+	  return 0;
+	}
+	
         /*
          * Make sure to check the VMA so that we do not perform
          * faults just to hit a PF_PK as soon as we fill in a
@@ -1217,7 +1224,6 @@ __do_page_fault(struct pt_regs *regs, unsigned long error_code,
         struct mm_struct *mm;
         int fault, major = 0;
         int showed_fault_info = 0;
-        struct vm_area_struct *walk;
         unsigned int flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
 
         tsk = current;
@@ -1382,6 +1388,8 @@ retry:
          * we can handle it..
          */
 good_area:
+        /* access_error() will return false if the vma is memdom-protected
+         * and delegate to smv_valid_fault() to determine if we should segfault */
         if (unlikely(access_error(error_code, vma))) {
             bad_area_access_error(regs, error_code, address, vma);
             return;
@@ -1389,28 +1397,8 @@ good_area:
 
         /* SMV related checking, terminate a process if it issus smv invalid page fault */
         if ( !smv_valid_fault(tsk->smv_id, vma, error_code) ){
-            int prot_code = error_code & PF_PROT;
-            int write_code = error_code & PF_WRITE;
-            int user_code = error_code & PF_USER;
-            int rsvd_code = error_code & PF_RSVD;
-            int instr_code = error_code & PF_INSTR;
-            unsigned long page_aligned_addr = address & PAGE_MASK;
-
             printk(KERN_ERR "[%s] --- smv %d issued smv invalid fault, KILL task pid %d %s---\n",
                    __func__, tsk->smv_id, tsk->pid, tsk->comm);
-            printk(KERN_ERR "[%s] pid %d smv %d page fault at 0x%16lx, page_aligned_addr: 0x%16lx--\n",
-                   __func__, tsk->pid, tsk->smv_id, address, page_aligned_addr);
-            printk(KERN_ERR "[%s] vma->vm_start: 0x%16lx to vma->vm_end: 0x%16lx, vma->memdom_id: %d\n",
-                   __func__, vma->vm_start, vma->vm_end, vma->memdom_id);
-            printk(KERN_ERR "[%s] prot: %d, write: %d, user: %d, rsvd: %d, instr_code: %d\n",
-                   __func__, prot_code, write_code, user_code, rsvd_code, instr_code);
-
-            walk = mm->mmap;
-            while (walk) {
-                printk(KERN_ERR "[%s] vma->vm_start: 0x%16lx to vma->vm_end: 0x%16lx, vma->memdom_id: %d\n",
-                       __func__, walk->vm_start, walk->vm_end, walk->memdom_id);
-                walk = walk->vm_next;
-            }
             fault_info(address, vma, error_code, &showed_fault_info);
             bad_area_access_error(regs, error_code, address, vma);
             return;

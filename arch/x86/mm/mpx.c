@@ -416,7 +416,7 @@ static int allocate_bt(struct mm_struct *mm, long __user *bd_entry)
 	unsigned long bt_addr;
 	unsigned long bd_new_entry;
 	int ret = 0;
-
+	
 	/*
 	 * Carve the virtual space out of userspace for the new
 	 * bounds table:

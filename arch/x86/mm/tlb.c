@@ -13,7 +13,7 @@
 #include <asm/apic.h>
 #include <asm/uv/uv.h>
 #include <linux/debugfs.h>
-
+#include <linux/smv.h>
 /*
  *	Smarter SMP flushing macros.
  *		c/o Linus Torvalds.

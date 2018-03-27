@@ -35,13 +35,11 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
     
     /* Protection fault */
     if ( error_code & PF_PROT ) {
-      slog(KERN_INFO, "[%s] Protection fault for smv %d and memdom %d\n", __func__, smv_id, memdom_id);
     }
 
     /* Write fault */
     if ( error_code & PF_WRITE ) {
         if ( privs & MEMDOM_WRITE ) {
-	  slog(KERN_INFO, "[%s] smv %d allowed to write memdom %d\n", __func__, smv_id, memdom_id);
             rv = 1;
         } else{
             printk(KERN_ERR "[%s] smv %d cannot write memdom %d\n", __func__, smv_id, memdom_id);
@@ -51,7 +49,6 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
     /* Read fault */ 
     else {
         if ( privs & MEMDOM_READ ) {
-	  slog(KERN_INFO, "[%s] smv %d allowed to read memdom %d\n", __func__, smv_id, memdom_id);
             rv = 1;
         } else{
             printk(KERN_ERR "[%s] smv %d cannot read memdom %d\n", __func__, smv_id, memdom_id);
@@ -61,7 +58,6 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
 
     /* kernel-/user-mode fault */
     if ( error_code & PF_USER ) {
-      slog(KERN_INFO, "[%s] user mode for smv %d\n", __func__, smv_id);
     }
 
     /* Use of reserved bit detected */
@@ -70,7 +66,6 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
 
     /* Fault was instruction fetch */
     if ( error_code & PF_INSTR ) {
-      slog(KERN_INFO, "[%s] instruction fetch for smv %d\n", __func__, smv_id);
     }
 
     return rv;
@@ -109,8 +104,8 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
 
     /* Don't copy page table to the main thread */
     if ( dst_smv == MAIN_THREAD ) {
-        slog(KERN_INFO, "[%s] smv %d attempts to overwrite main thread's page table. Skip\n", __func__, src_smv);
-        return 0;
+      slog(KERN_INFO, "[%s] smv %d attempts to overwrite main thread's page table. Skip\n", __func__, src_smv);
+      return 0;
     }
     /* Source and destination smvs cannot be the same */
     if ( dst_smv == src_smv ) {
@@ -122,7 +117,6 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
         slog(KERN_INFO, "[%s] main thread smv %d, skip\n", __func__, current->smv_id);
         return 0;
     }
-
 
     /* SMP protection */
     mutex_lock(&mm->smv_metadataMutex);
@@ -164,7 +158,8 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     dst_ptl = pte_lockptr(mm, dst_pmd);
     spin_lock_nested(dst_ptl, SINGLE_DEPTH_NESTING);
 
-    /* Skip copying pte if two ptes refer to the same page and specify the same access privileges */
+    /* Skip copying pte if two ptes refer to the same page and 
+     * specify the same access privileges */
     if ( !pte_same(*src_pte, *dst_pte) ) {
         page = vm_normal_page(vma, address, *src_pte);       
         /* Update data page statistics */
@@ -172,12 +167,12 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
             init_rss_vec(rss);
             get_page(page);
             page_dup_rmap(page, false);
-            if ( PageAnon(page) ) {
-                rss[MM_ANONPAGES]++;
-            }
-            else{
-                rss[MM_FILEPAGES]++;
-            }
+	    if ( PageAnon(page) ) {
+	      rss[MM_ANONPAGES]++;
+	    }
+	    else{
+	      rss[MM_FILEPAGES]++;
+	    }
     	    add_mm_rss_vec(mm, rss);
         }
         slog(KERN_INFO, "[%s] src_pte 0x%16lx(smv %d) != dst_pte 0x%16lx (smv %d) for addr 0x%16lx\n", __func__, pte_val(*src_pte), src_smv, pte_val(*dst_pte), dst_smv, address);
@@ -185,7 +180,8 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
         slog(KERN_INFO, "[%s] src_pte (smv %d) == dst_pte (smv %d) for addr 0x%16lx\n", __func__, src_smv, dst_smv, address);
     }
 
-    /* Set the actual value to be the same as the source pgtables for destination  */   
+    /* Set the actual value to be the same as the source 
+     * pgtables for destination  */   
     set_pte_at(mm, address, dst_pte, *src_pte);
 
     slog(KERN_INFO, "[%s] src smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n", 
