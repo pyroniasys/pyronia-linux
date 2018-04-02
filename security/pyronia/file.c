@@ -19,19 +19,12 @@
 #include "include/path.h"
 #include "include/policy.h"
 #include "include/callgraph.h"
-
-#ifdef PYR_TESTING
-#if PYR_TESTING
-#include "include/kernel_test.h"
+#include "include/stack_inspector.h"
 
 #define DNS_LIB "/lib/x86_64-linux-gnu/libnss_dns-2.23.so"
 #define MDNS4_LIB "/lib/x86_64-linux-gnu/libnss_mdns4_minimal.so.2"
 #define FILES_LIB "/lib/x86_64-linux-gnu/libnss_files-2.23.so"
 #define RESOLV_LIB "/lib/x86_64-linux-gnu/libresolv-2.23.so"
-#else
-#include "include/userland_test.h"
-#endif
-#endif
 
 struct file_perms pyr_nullperms;
 
@@ -267,41 +260,6 @@ unsigned int pyr_str_perms(struct pyr_dfa *dfa, unsigned int start,
 }
 
 /**
- * pyr_cg_perms - find the library permission that matches @name
- * @lib_perm_db: library permissions DB to search in
- * @name: string to match in the library permissions DB  (NOT NULL)
- * @lib_perms: Returns - the effective permissions computed from the callgraph @name
- *
- * @lib_perms is set to 0 if computing the permissions fails
- */
-static void pyr_cg_file_perms(struct pyr_lib_policy_db *lib_perm_db,
-                         const char *name, u32 *lib_perms) {
-    pyr_cg_node_t *callgraph = NULL;
-    u32 perms = 0;
-
-    #ifdef PYR_TESTING
-    #if PYR_TESTING
-    if (init_callgraph("cam", &callgraph)) {
-        PYR_ERROR("File - Failed to create callgraph for %s\n", "cam");
-        goto out;
-    }
-    #endif
-    #else
-    // TODO: implement upcall to language runtime for callstack
-    #endif
-
-    if (pyr_compute_lib_perms(lib_perm_db, callgraph,
-                              name, &perms)) {
-        PYR_ERROR("File - Error verifying callgraph for %s\n", "cam");
-        goto out;
-    }
-
- out:
-    pyr_free_callgraph(&callgraph);
-    *lib_perms = perms;
-}
-
-/**
  * is_deleted - test if a file has been completely unlinked
  * @dentry: dentry of file to test for deletion  (NOT NULL)
  *
@@ -351,63 +309,32 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 		if (request & ~perms.allow)
 			error = -EACCES;
 	}
-
+	
+	PYR_DEBUG("[%s] Profile %s using pyronia? %d\n", __func__, profile->base.name, profile->using_pyronia);
+	
         // Pyronia hook: check the call stack to determine
         // if the requesting library has permissions to
         // complete this operation
-        if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
-            #ifdef PYR_TESTING
-	  #if PYR_TESTING
-            // Move all of these to default policies added by the
-            // userspace policy parser
-            // ugh, we have to make an exception for the console
-            // otherwise our program will hate itself every time
-            // it tries to print to stdout or stderr
-            // FIXME: make the DNS-related files only accessible from
-            // the networking library
-            if (!strncmp(name, "/dev/pts/", 9) ||
-                !strncmp(name, "/etc/resolv.conf", 16) ||
-                !strncmp(name, "/etc/nsswitch.conf", 18) ||
-                !strncmp(name, "/run/resolvconf/resolv.conf", 27) ||
-		!strncmp(name, "/etc/host.conf", 14) ||
-		!strncmp(name, "/etc/hosts", 10) ||
-		// FIXME: figure out what to do about these two,
-		// we don't want to just allow any lib to access these
-		// willy-nilly
-		!strncmp(name, "/usr/lib/", 9) ||
-		!strncmp(name, "/usr/lib/x86_64-linux-gnu/", 26) ||
-                !strncmp(name, DNS_LIB, strlen(DNS_LIB)) ||
-                !strncmp(name, MDNS4_LIB, strlen(MDNS4_LIB)) ||
-		!strncmp(name, RESOLV_LIB, strlen(RESOLV_LIB)) ||
-                !strncmp(name, FILES_LIB, strlen(FILES_LIB))) {
-                lib_perms = request;
-            }
-            else {
-                // FIXME: msm - support multi-threaded stack tracing
-                pyr_cg_file_perms(profile->lib_perm_db, name, &lib_perms);
-            }
-            #else
-            // FIXME: msm - support multi-threaded stack tracing
-            pyr_cg_file_perms(profile->lib_perm_db, name, &lib_perms);
-	    #endif
-	    #else
-	    // FIXME: msm - support multi-threaded stack tracing
-            pyr_cg_file_perms(profile->lib_perm_db, name, &lib_perms);
-            #endif
+	if (!error && profile->using_pyronia) {
 
-            // this checks if the requested permissions are an exact match
-            // to the effective library permissions
-            if (request & ~lib_perms) {
-                PYR_ERROR("File - Expected %d, got %d; file: %s\n", lib_perms, request, name);
-                error = -EACCES;
-            }
-            else
-                PYR_ERROR("File - Operation allowed for %s\n", name);
-        }
-
+	  PYR_DEBUG("[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, profile->port_id);
+	  
+	  pyr_inspect_callstack(profile->port_id, profile->lib_perm_db,
+				name, &lib_perms);
+	  
+	  // this checks if the requested permissions are an exact match
+	  // to the effective library permissions
+	  if (request & ~lib_perms) {
+	    PYR_ERROR("File - Expected %d, got %d; file: %s\n", lib_perms, request, name);
+	    error = -EACCES;
+	  }
+	  else
+	    PYR_ERROR("File - Operation allowed for %s\n", name);
+	}
+	
 	error = pyr_audit_file(profile, &perms, GFP_KERNEL, op, request,
                                name, NULL, cond->uid, info, error);
-
+	
 	kfree(buffer);
 	return error;
 }

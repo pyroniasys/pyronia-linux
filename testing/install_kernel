@@ -23,6 +23,14 @@ else
     exit $?
 fi
 
+sudo make ARCH=x86_64 INSTALL_HDR_PATH=/usr headers_install;
+if [ $? -eq 0 ]; then
+    echo " ================== kernel headers installed successfully. ======================"
+else
+    echo " ================== kernel headers failed to install, check error messages. error code: $? =============="
+    exit $?
+fi
+
 sudo make O=$BUILD ARCH=x86_64 install;
 if [ $? -eq 0 ]; then
     echo " ================== kernel image installed successfully. ======================"

@@ -24,16 +24,7 @@
 #include <linux/types.h>
 #endif
 
-/** pyr_data_types defines the possible expected sensitive
- * data types obtained from sensors or files
- */
-enum pyr_data_types {
-    CAM_DATA,
-    MIC_DATA,
-    ENV_DATA,
-    MISC_FILE_DATA,
-    // TODO: add more fine-grained types
-};
+#include <uapi/linux/pyronia_mac.h>
 
 /* pyr_lib_perms defines the possible permissions a library can
  * have under Pyronia
@@ -89,6 +80,7 @@ struct pyr_acl_entry {
         struct net_entry net_dest;
     } target;
 
+    // TODO: currently unused
     enum pyr_data_types data_type;
     struct pyr_acl_entry *next;
 };

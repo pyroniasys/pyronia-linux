@@ -22,7 +22,7 @@
 #include "match.h"
 
 // msm: comment this out if we're not testing
-#define PYR_TESTING 1
+//#define PYR_TESTING 1
 
 /*
  * Class of mediation types in the AppArmor policy db
@@ -61,17 +61,15 @@ void *__pyr_kvmalloc(size_t size, gfp_t flags);
  * which is not related to profile accesses.
  */
 
-#ifndef PYR_TESTING
 #define PYR_DEBUG(fmt, args...)						\
 	do {								\
-		if (pyr_g_debug && printk_ratelimit())			\
-			printk(KERN_DEBUG "Pyronia: " fmt, ##args);	\
+	  if (pyr_g_debug && printk_ratelimit())			\
+	    printk(KERN_DEBUG "Pyronia: " fmt, ##args);			\
 	} while (0)
 #define PYR_ERROR(fmt, args...)						\
 	do {								\
-		if (printk_ratelimit())					\
-			printk(KERN_ERR "Pyronia: " fmt, ##args);	\
-	} while (0)
+	  printk(KERN_ERR "Pyronia: " fmt, ##args);			\
+        } while (0)
 
 static inline void *kvmalloc(size_t size)
 {
@@ -83,33 +81,6 @@ static inline void *kvzalloc(size_t size)
 	return __pyr_kvmalloc(size, __GFP_ZERO);
 
 }
-#else
-// re-define these functions for kernel-level testing.
-// Avoids having to import kernel_test.h in every Pyronia module.
-#if PYR_TESTING
-#define PYR_DEBUG(fmt, args...)						\
-	do {								\
-	  if (printk_ratelimit())					\
-			printk(KERN_DEBUG "Pyronia: " fmt, ##args);	\
-	} while (0)
-#define PYR_ERROR(fmt, args...)						\
-	do {								\
-		if (printk_ratelimit())					\
-			printk(KERN_ERR "Pyronia: " fmt, ##args);	\
-	} while (0)
-
-static inline void *kvmalloc(size_t size)
-{
-	return __pyr_kvmalloc(size, 0);
-}
-
-static inline void *kvzalloc(size_t size)
-{
-	return __pyr_kvmalloc(size, __GFP_ZERO);
-
-}
-#endif
-#endif
 
 /* returns 0 if kref not incremented */
 static inline int kref_get_not0(struct kref *kref)

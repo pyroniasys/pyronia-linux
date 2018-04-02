@@ -1,6 +1,6 @@
 #!/bin/bash
 
-./load_test_profile
-./restart_pyronia
+./pyronia-linux/testing/load_test_profile
+./pyronia-linux/testing/restart_pyronia
 
 echo "Don't forget to start the test TCP server."

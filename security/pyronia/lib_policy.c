@@ -12,16 +12,8 @@
  */
 
 #include "include/lib_policy.h"
-
-#ifdef PYR_TESTING
-#if PYR_TESTING
-#include "include/kernel_test.h"
-#else
-#include "include/userland_test.h"
-#endif
-#else
 #include "include/pyronia.h"
-#endif
+
 
 // Allocates a new ACL entry and adds it to the ACL pointed to by `acl`.
 // This function can also be used to initialize `acl`.
@@ -32,8 +24,7 @@ int pyr_add_acl_entry(struct pyr_acl_entry **acl,
                       const char *name,
                       u32 perms,
                       enum pyr_data_types data_type) {
-    struct pyr_acl_entry *new_entry =
-        (struct pyr_acl_entry *)kvzalloc(sizeof(struct pyr_acl_entry));
+    struct pyr_acl_entry *new_entry = kvzalloc(sizeof(struct pyr_acl_entry));
 
     if (new_entry == NULL) {
         goto fail;
@@ -58,6 +49,8 @@ int pyr_add_acl_entry(struct pyr_acl_entry **acl,
     new_entry->next = *acl;
     *acl = new_entry;
 
+    PYR_DEBUG("[%s] Added new ACL entry for lib %s\n", __func__, name);
+    
     return 0;
  fail:
     kvfree(new_entry);
@@ -74,11 +67,11 @@ int pyr_add_acl_entry(struct pyr_acl_entry **acl,
 int pyr_add_lib_policy(struct pyr_lib_policy_db **policy_db,
                        const char *lib,
                        struct pyr_acl_entry *acl) {
-    struct pyr_lib_policy *new_policy =
-        (struct pyr_lib_policy *)kvzalloc(sizeof(struct pyr_lib_policy));
+    struct pyr_lib_policy *new_policy = kvzalloc(sizeof(struct pyr_lib_policy));
 
     if (new_policy == NULL) {
-        goto fail;
+      printk(KERN_INFO "[%s] no mem for %s policy\n", __func__, lib);
+      goto fail;
     }
 
     new_policy->lib = lib;
@@ -98,8 +91,7 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db **policy_db,
 // Allocates a new policy DB
 // Returns 0 on success, -1 on failure
 int pyr_new_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
-    struct pyr_lib_policy_db *db =
-        (struct pyr_lib_policy_db *)kvzalloc(sizeof(struct pyr_lib_policy_db));
+    struct pyr_lib_policy_db *db = kvzalloc(sizeof(struct pyr_lib_policy_db));
 
     if (db == NULL) {
         goto fail;

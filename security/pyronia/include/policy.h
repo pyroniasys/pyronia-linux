@@ -181,6 +181,10 @@ struct pyr_replacedby {
  * @net: network controls for the profile
  * @rlimits: rlimits for the profile
  * @lib_perm_db: the library-specific permissions for the profile
+ * @port_id: the stack inspection port for this profile's application
+ * @using_pyronia: flag indicating whether the confined application should 
+ * be subject to stack inspection checks.
+ *
  *
  * @dents: dentries for the profiles file entries in pyroniafs
  * @dirname: name of the profile dir in pyroniafs
@@ -224,6 +228,8 @@ struct pyr_profile {
 	struct pyr_net net;
 	struct pyr_rlimit rlimits;
         struct pyr_lib_policy_db *lib_perm_db;
+        u32 port_id;
+        int using_pyronia;
 
 	unsigned char *hash;
 	char *dirname;

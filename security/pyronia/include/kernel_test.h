@@ -19,13 +19,9 @@ static const char *test_libs[3];
 
 static const char *test_names[2];
 
-#ifndef NUM_DEFAULT
-#define NUM_DEFAULT 2
-#endif
+#define NUM_DEFAULT 8
 
 static const char *default_names[NUM_DEFAULT];
-
-static const char *test_prof = "/home/pyronia/kernel_permissions_checker_test";
 
 static inline void init_testlibs(void) {
     test_libs[0] = "cam";
@@ -40,8 +36,14 @@ static inline void init_testnames(void) {
 
 // these files should be allowed for all libs by default
 static inline void init_default(void) {
-    default_names[0] = "/lib/x86_64-linux-gnu/libc-2.23.so";
-    default_names[1] = "/etc/ld.so.cache";
+  default_names[0] = "/etc/ld.so.cache";
+  default_names[1] = "/lib/x86_64-linux-gnu/libc-2.23.so";
+  default_names[2] = "/lib/x86_64-linux-gnu/libpyronia.so";
+  default_names[3] = "/lib/x86_64-linux-gnu/libsmv.so";
+  default_names[4] = "/lib/x86_64-linux-gnu/libpthread-2.23.so";
+  default_names[5] = "/lib/x86_64-linux-gnu/libnl-genl-3.so.200.22.0";
+  default_names[6] = "/lib/x86_64-linux-gnu/libnl-3.so.200.22.0";
+  default_names[7] = "/lib/x86_64-linux-gnu/libm-2.23.so";
 }
 
 static inline int create_default_policy_entries(struct pyr_lib_policy_db *db,
@@ -49,15 +51,15 @@ static inline int create_default_policy_entries(struct pyr_lib_policy_db *db,
 
     struct pyr_lib_policy *policy = NULL;
     int err = 0;
-
     int i;
+    
+    policy = pyr_find_lib_policy(db, lib);
+    
+    if (policy == NULL) {
+      return -1;
+    }
+    
     for (i = 0; i < NUM_DEFAULT; i++) {
-        policy = pyr_find_lib_policy(db, lib);
-
-        if (policy == NULL) {
-            return -1;
-        }
-
         err = pyr_add_acl_entry(&(policy->acl), resource_entry,
                                 default_names[i], 1, CAM_DATA);
         if (err) {
@@ -74,7 +76,7 @@ static inline int create_default_policy_entries(struct pyr_lib_policy_db *db,
 static inline int init_lib_policy(struct pyr_lib_policy_db **policy) {
     int err = 0;
     struct pyr_lib_policy_db *db;
-    struct pyr_acl_entry *acl;
+    struct pyr_acl_entry *acl, *acl1;
 
     init_testlibs();
     init_testnames();
@@ -107,15 +109,15 @@ static inline int init_lib_policy(struct pyr_lib_policy_db **policy) {
     }
 
     // create the ACL entry for "127.0.0.1"
-    acl = NULL;
-    err = pyr_add_acl_entry(&acl, net_entry, test_names[1], OP_CONNECT,
+    acl1 = NULL;
+    err = pyr_add_acl_entry(&acl1, net_entry, test_names[1], OP_CONNECT,
                             CAM_DATA);
     if (err) {
         goto fail;
     }
 
     // add a policy entry for "http" to the permissions db
-    err = pyr_add_lib_policy(&db, test_libs[1], acl);
+    err = pyr_add_lib_policy(&db, test_libs[1], acl1);
     if (err) {
         goto fail;
     }
@@ -179,7 +181,7 @@ static inline int set_file_perms(struct pyr_profile *profile) {
 
             acl = pyr_find_lib_acl_entry(policy, default_names[j]);
             if (acl == NULL) {
-                PYR_ERROR("Couldn't find ACL for %s in %s policy\n", default_names[i], test_libs[i]);
+                PYR_ERROR("Couldn't find ACL for %s in %s policy\n", default_names[j], test_libs[i]);
                 goto fail;
             }
 

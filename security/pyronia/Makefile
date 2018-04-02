@@ -5,7 +5,7 @@ obj-$(CONFIG_SECURITY_PYRONIA) += pyronia.o
 pyronia-y := pyroniafs.o audit.o capability.o context.o ipc.o lib.o match.o \
               path.o domain.o policy.o policy_unpack.o procattr.o lsm.o \
               resource.o sid.o file.o net.o mount.o callgraph.o lib_policy.o \
-              smv-netlink.o
+              stack_inspector.o smv-netlink.o si_comm.o
 
 pyronia-$(CONFIG_SECURITY_PYRONIA_HASH) += crypto.o
 

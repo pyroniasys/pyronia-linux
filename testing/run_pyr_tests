@@ -1,0 +1,11 @@
+#!/bin/bash
+
+SRCDIR=$HOME/libpyronia/libraries/libpyronia/testsuite
+
+gcc -g $SRCDIR/kernel_upcall_test.c -o $HOME/kernel_upcall_test -lpyronia -lsmv
+
+cd $HOME
+
+echo "*** Running End-to-End Pyronia Tests***"
+
+./kernel_upcall_test

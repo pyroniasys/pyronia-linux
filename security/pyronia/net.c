@@ -22,14 +22,7 @@
 #include "include/net.h"
 #include "include/policy.h"
 #include "include/callgraph.h"
-
-#ifdef PYR_TESTING
-#if PYR_TESTING
-#include "include/kernel_test.h"
-#else
-#include "include/userland_test.h"
-#endif
-#endif
+#include "include/stack_inspector.h"
 
 #include "net_names.h"
 
@@ -203,35 +196,6 @@ static void in_addr_to_str(struct sockaddr *sa, const char**addr_str)
     }
 }
 
-static void pyr_cg_net_perms(struct pyr_lib_policy_db *lib_perm_db,
-                             const char *addr, u32 *lib_op) {
-
-    pyr_cg_node_t *callgraph = NULL;
-    u32 op = 0;
-
-    #ifdef PYR_TESTING
-    #if PYR_TESTING
-    if (init_callgraph("http", &callgraph)) {
-        PYR_ERROR("Net - Failed to create callgraph for %s\n", "http");
-        goto out;
-    }
-    #endif
-    #else
-    // TODO: implement upcall to language runtime for callstack
-    #endif
-
-    if (pyr_compute_lib_perms(lib_perm_db,
-                              callgraph,
-                              addr, &op)) {
-        PYR_ERROR("Net - Error verifying callgraph for %s\n", "http");
-        goto out;
-    }
-
- out:
-    pyr_free_callgraph(&callgraph);
-    *lib_op = op;
-}
-
 /**
  * pyr_revalidate_sk - Revalidate access to a sock
  * @op: operation being checked
@@ -258,10 +222,12 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
             error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
                                  sk->sk_protocol, sk);
 
+	    PYR_DEBUG("[%s] Profile %s using pyronia? %d\n", __func__, profile->base.name, profile->using_pyronia);
+	    
             // Pyronia hook: check the call stack to determine
             // if the requesting library has permissions to
             // complete this operation
-            if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
+            if (!error && profile->using_pyronia) {
                 sock_family = sk->sk_family;
 
                 /* unix domain and netlink sockets are handled by ipc */
@@ -282,8 +248,8 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                 }
 
                 // compute the permissions
-                pyr_cg_net_perms(profile->lib_perm_db, addr,
-                                 &lib_op);
+                pyr_inspect_callstack(profile->port_id, profile->lib_perm_db,
+				      addr, &lib_op);
 
                 // this checks if the requested operation is an
                 // exact match to the effective library operation

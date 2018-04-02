@@ -88,12 +88,6 @@
 #include "include/policy_unpack.h"
 #include "include/resource.h"
 
-#ifdef PYR_TESTING
-#if PYR_TESTING
-#include "include/kernel_test.h"
-#endif
-#endif
-
 /* root profile namespace */
 struct pyr_namespace *pyr_root_ns;
 
@@ -665,6 +659,10 @@ struct pyr_profile *pyr_alloc_profile(const char *hname)
 
 	if (!policy_init(&profile->base, NULL, hname))
 		goto fail;
+
+	if (pyr_new_lib_policy_db(&profile->lib_perm_db))
+	  goto fail;
+
 	kref_init(&profile->count);
 
 	/* refcount released by caller */
