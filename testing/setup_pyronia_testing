@@ -1,5 +1,6 @@
 #!/bin/bash
 
+./pyronia-linux/testing/install_testing_deps
 ./pyronia-linux/testing/load_test_profile
 ./pyronia-linux/testing/restart_pyronia
 
