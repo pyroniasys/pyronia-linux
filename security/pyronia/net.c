@@ -23,32 +23,33 @@
 #include "include/policy.h"
 #include "include/callgraph.h"
 #include "include/stack_inspector.h"
+#include "include/lib_policy.h"
 
 #include "net_names.h"
 
 struct pyr_fs_entry pyr_fs_entry_network[] = {
-	PYR_FS_FILE_STRING("af_mask", PYR_FS_AF_MASK),
-	{ }
+        PYR_FS_FILE_STRING("af_mask", PYR_FS_AF_MASK),
+        { }
 };
 
 /* audit callback for net specific fields */
 static void audit_cb(struct audit_buffer *ab, void *va)
 {
-	struct common_audit_data *sa = va;
+        struct common_audit_data *sa = va;
 
-	audit_log_format(ab, " family=");
-	if (address_family_names[sa->u.net->family]) {
-		audit_log_string(ab, address_family_names[sa->u.net->family]);
-	} else {
-		audit_log_format(ab, "\"unknown(%d)\"", sa->u.net->family);
-	}
-	audit_log_format(ab, " sock_type=");
-	if (sock_type_names[sa->pyrd->net.type]) {
-		audit_log_string(ab, sock_type_names[sa->pyrd->net.type]);
-	} else {
-		audit_log_format(ab, "\"unknown(%d)\"", sa->pyrd->net.type);
-	}
-	audit_log_format(ab, " protocol=%d", sa->pyrd->net.protocol);
+        audit_log_format(ab, " family=");
+        if (address_family_names[sa->u.net->family]) {
+                audit_log_string(ab, address_family_names[sa->u.net->family]);
+        } else {
+                audit_log_format(ab, "\"unknown(%d)\"", sa->u.net->family);
+        }
+        audit_log_format(ab, " sock_type=");
+        if (sock_type_names[sa->pyrd->net.type]) {
+                audit_log_string(ab, sock_type_names[sa->pyrd->net.type]);
+        } else {
+                audit_log_format(ab, "\"unknown(%d)\"", sa->pyrd->net.type);
+        }
+        audit_log_format(ab, " protocol=%d", sa->pyrd->net.protocol);
 }
 
 /**
@@ -64,48 +65,48 @@ static void audit_cb(struct audit_buffer *ab, void *va)
  * Returns: %0 or sa->error else other errorcode on failure
  */
 static int audit_net(struct pyr_profile *profile, int op, u16 family, int type,
-		     int protocol, struct sock *sk, int error)
+                     int protocol, struct sock *sk, int error)
 {
-	int audit_type = AUDIT_PYRONIA_AUTO;
-	struct common_audit_data sa;
-	struct pyronia_audit_data pyrd = { };
-	struct lsm_network_audit net = { };
-	if (sk) {
-		sa.type = LSM_AUDIT_DATA_NET;
-	} else {
-		sa.type = LSM_AUDIT_DATA_NONE;
-	}
-	/* todo fill in socket addr info */
-	sa.pyrd = &pyrd;
-	sa.u.net = &net;
-	sa.pyrd->op = op,
-	sa.u.net->family = family;
-	sa.u.net->sk = sk;
-	sa.pyrd->net.type = type;
-	sa.pyrd->net.protocol = protocol;
-	sa.pyrd->error = error;
+        int audit_type = AUDIT_PYRONIA_AUTO;
+        struct common_audit_data sa;
+        struct pyronia_audit_data pyrd = { };
+        struct lsm_network_audit net = { };
+        if (sk) {
+                sa.type = LSM_AUDIT_DATA_NET;
+        } else {
+                sa.type = LSM_AUDIT_DATA_NONE;
+        }
+        /* todo fill in socket addr info */
+        sa.pyrd = &pyrd;
+        sa.u.net = &net;
+        sa.pyrd->op = op,
+        sa.u.net->family = family;
+        sa.u.net->sk = sk;
+        sa.pyrd->net.type = type;
+        sa.pyrd->net.protocol = protocol;
+        sa.pyrd->error = error;
 
-	if (likely(!sa.pyrd->error)) {
-		u16 audit_mask = profile->net.audit[sa.u.net->family];
-		if (likely((AUDIT_MODE(profile) != AUDIT_ALL) &&
-			   !(1 << sa.pyrd->net.type & audit_mask)))
-			return 0;
-		audit_type = AUDIT_PYRONIA_AUDIT;
-	} else {
-		u16 quiet_mask = profile->net.quiet[sa.u.net->family];
-		u16 kill_mask = 0;
-		u16 denied = (1 << sa.pyrd->net.type);
+        if (likely(!sa.pyrd->error)) {
+                u16 audit_mask = profile->net.audit[sa.u.net->family];
+                if (likely((AUDIT_MODE(profile) != AUDIT_ALL) &&
+                           !(1 << sa.pyrd->net.type & audit_mask)))
+                        return 0;
+                audit_type = AUDIT_PYRONIA_AUDIT;
+        } else {
+                u16 quiet_mask = profile->net.quiet[sa.u.net->family];
+                u16 kill_mask = 0;
+                u16 denied = (1 << sa.pyrd->net.type);
 
-		if (denied & kill_mask)
-			audit_type = AUDIT_PYRONIA_KILL;
+                if (denied & kill_mask)
+                        audit_type = AUDIT_PYRONIA_KILL;
 
-		if ((denied & quiet_mask) &&
-		    AUDIT_MODE(profile) != AUDIT_NOQUIET &&
-		    AUDIT_MODE(profile) != AUDIT_ALL)
-			return COMPLAIN_MODE(profile) ? 0 : sa.pyrd->error;
-	}
+                if ((denied & quiet_mask) &&
+                    AUDIT_MODE(profile) != AUDIT_NOQUIET &&
+                    AUDIT_MODE(profile) != AUDIT_ALL)
+                        return COMPLAIN_MODE(profile) ? 0 : sa.pyrd->error;
+        }
 
-	return pyr_audit(audit_type, profile, GFP_KERNEL, &sa, audit_cb);
+        return pyr_audit(audit_type, profile, GFP_KERNEL, &sa, audit_cb);
 }
 
 /**
@@ -119,26 +120,26 @@ static int audit_net(struct pyr_profile *profile, int op, u16 family, int type,
  * Returns: %0 else error if permission denied
  */
 int pyr_net_perm(int op, struct pyr_profile *profile, u16 family, int type,
-		int protocol, struct sock *sk)
+                int protocol, struct sock *sk)
 {
-	u16 family_mask;
-	int error;
+        u16 family_mask;
+        int error;
 
-	if ((family < 0) || (family >= AF_MAX))
-		return -EINVAL;
+        if ((family < 0) || (family >= AF_MAX))
+                return -EINVAL;
 
-	if ((type < 0) || (type >= SOCK_MAX))
-		return -EINVAL;
+        if ((type < 0) || (type >= SOCK_MAX))
+                return -EINVAL;
 
-	/* unix domain and netlink sockets are handled by ipc */
-	if (family == AF_UNIX || family == AF_NETLINK)
-		return 0;
+        /* unix domain and netlink sockets are handled by ipc */
+        if (family == AF_UNIX || family == AF_NETLINK)
+                return 0;
 
-	family_mask = profile->net.allow[family];
+        family_mask = profile->net.allow[family];
 
-	error = (family_mask & (1 << type)) ? 0 : -EACCES;
+        error = (family_mask & (1 << type)) ? 0 : -EACCES;
 
-	return audit_net(profile, op, family, type, protocol, sk, error);
+        return audit_net(profile, op, family, type, protocol, sk, error);
 
 }
 
@@ -151,21 +152,21 @@ int pyr_net_perm(int op, struct pyr_profile *profile, u16 family, int type,
  */
 int pyr_revalidate_sk(int op, struct sock *sk)
 {
-	struct pyr_profile *profile;
-	int error = 0;
+        struct pyr_profile *profile;
+        int error = 0;
 
-	/* pyr_revalidate_sk should not be called from interrupt context
-	 * don't mediate these calls as they are not task related
-	 */
-	if (in_interrupt())
-		return 0;
+        /* pyr_revalidate_sk should not be called from interrupt context
+         * don't mediate these calls as they are not task related
+         */
+        if (in_interrupt())
+                return 0;
 
-	profile = __pyr_current_profile();
-	if (!unconfined(profile))
-		error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
-				    sk->sk_protocol, sk);
+        profile = __pyr_current_profile();
+        if (!unconfined(profile))
+                error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
+                                    sk->sk_protocol, sk);
 
-	return error;
+        return error;
 }
 
 static void in_addr_to_str(struct sockaddr *sa, const char**addr_str)
@@ -205,25 +206,25 @@ static void in_addr_to_str(struct sockaddr *sa, const char**addr_str)
  */
 int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 {
-	struct pyr_profile *profile;
-	int error = 0;
+        struct pyr_profile *profile;
+        int error = 0;
         unsigned short sock_family;
         u32 lib_op;
         const char *addr;
 
-	/* pyr_revalidate_sk should not be called from interrupt context
-	 * don't mediate these calls as they are not task related
-	 */
-	if (in_interrupt())
-		return 0;
+        /* pyr_revalidate_sk should not be called from interrupt context
+         * don't mediate these calls as they are not task related
+         */
+        if (in_interrupt())
+                return 0;
 
-	profile = __pyr_current_profile();
-	if (!unconfined(profile)) {
+        profile = __pyr_current_profile();
+        if (!unconfined(profile)) {
             error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
                                  sk->sk_protocol, sk);
 
-	    PYR_DEBUG("[%s] Profile %s using pyronia? %d\n", __func__, profile->base.name, profile->using_pyronia);
-	    
+            PYR_DEBUG("[%s] Profile %s using pyronia? %d\n", __func__, profile->base.name, profile->using_pyronia);
+
             // Pyronia hook: check the call stack to determine
             // if the requesting library has permissions to
             // complete this operation
@@ -247,9 +248,30 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                     }
                 }
 
-                // compute the permissions
-                pyr_inspect_callstack(profile->port_id, profile->lib_perm_db,
-				      addr, &lib_op);
+                if (!profile->lib_perm_db) {
+                    // something went really wrong here
+                    PYR_ERROR("[%s] Library permissions for profile %s are now null!!!\n",
+                              __func__, profile->base.name);
+                    error = -EACCES;
+                    goto out;
+                }
+
+                // check if we have a default policy for this address
+                if (pyr_is_default_lib_policy(profile->lib_perm_db, addr)) {
+                    lib_op = pyr_get_default_perms(profile->lib_perm_db,
+                                                      addr);
+                    PYR_DEBUG("[%s] %s is default in profile %s\n",
+                              __func__, addr, profile->base.name);
+                }
+                else {
+                    PYR_DEBUG("[%s] Requesting callstack for addr %s from runtime %d\n", __func__, addr, profile->port_id);
+
+                    // the requested address is not in our defaults list,
+                    // so ask for the callstack
+                    pyr_inspect_callstack(profile->port_id,
+                                          profile->lib_perm_db, addr,
+                                          &lib_op);
+                }
 
                 // this checks if the requested operation is an
                 // exact match to the effective library operation
@@ -264,5 +286,6 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
             }
         }
 
-	return error;
+ out:
+        return error;
 }

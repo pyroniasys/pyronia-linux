@@ -1,8 +1,9 @@
 #!/bin/bash
 
-LIBDIR=/home/pyronia/libpyronia
+LIBDIR=/home/pyronia/libpyronia/libapparmor
 
 cd $LIBDIR/libraries/libapparmor
+sudo make clean
 ./autogen.sh
 ./configure --prefix=/usr --with-perl --with-python
 sudo make
@@ -17,6 +18,7 @@ sudo make
 sudo make install
 
 cd $LIBDIR/parser
+make clean
 sudo make
 sudo make install
 

@@ -14,17 +14,19 @@
 #ifndef __PYR_LIBPOLICY_H
 #define __PYR_LIBPOLICY_H
 
-#ifdef PYR_TESTING
-#if PYR_TESTING
 #include <linux/types.h>
-#else
-#include "userland_test.h"
-#endif
-#else
-#include <linux/types.h>
-#endif
-
 #include <uapi/linux/pyronia_mac.h>
+
+/* This is used to indicate to the stack inspector
+ * that a library's permissions should be transitively
+ * passed on to the next library in a callstack.
+ */
+#define TRANSITIVE_LIB_POLICY 0xffffffff
+
+#define SI_PORT_STR_DELIM ":"
+#define LIB_RULE_STR_DELIM ","
+#define RESOURCE_STR_DELIM " "
+#define DEFAULT_NAME "d"
 
 /* pyr_lib_perms defines the possible permissions a library can
  * have under Pyronia
@@ -56,14 +58,14 @@ enum acl_entry_type {
 // for a file system resource-based
 // permissions
 struct resource_entry {
-    const char *name;
+    char *name;
     // this is the OR of various file access permissions
     // need to match with requested & ~perms to allow
     u32 perms;
 };
 
 struct net_entry {
-    const char *name;
+    char *name;
     // this is the OR of various permitted network operations
     // need to match with requested_op & ~op to allow
     u32 op;
@@ -91,7 +93,7 @@ struct pyr_acl_entry {
  * next: the next entry in the library policy database
  */
 struct pyr_lib_policy {
-    const char* lib;
+    char* lib;
     struct pyr_acl_entry *acl;
     struct pyr_lib_policy *next;
 };
@@ -99,22 +101,28 @@ struct pyr_lib_policy {
 /* An application's Pyronia library policy database.
  * policy_db_head: The first entry in the policy database
  *      linked list
+ * defaults: The list of resource entries that can be accessed
+ *      by all libraries so long as the requested access matches
  */
 struct pyr_lib_policy_db {
     struct pyr_lib_policy *perm_db_head;
-    // TODO: What other metadata do we need here?
+    struct pyr_acl_entry *defaults;
 };
 
-int pyr_add_acl_entry(struct pyr_acl_entry **, enum acl_entry_type,
-                      const char *, u32, enum pyr_data_types);
-int pyr_add_lib_policy(struct pyr_lib_policy_db **, const char *,
-                       struct pyr_acl_entry *);
+int pyr_add_lib_policy(struct pyr_lib_policy_db *, const char *,
+                       enum acl_entry_type, const char *, u32);
+int pyr_add_default(struct pyr_lib_policy_db *, enum acl_entry_type,
+                    const char *, u32);
+u32 pyr_get_lib_perms(struct pyr_lib_policy_db *, const char *,
+		      const char *);
+u32 pyr_get_default_perms(struct pyr_lib_policy_db *, const char *);
+int pyr_is_default_lib_policy(struct pyr_lib_policy_db *,
+                              const char *);
 int pyr_new_lib_policy_db(struct pyr_lib_policy_db **);
-struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *,
-                                              const char *);
-u32 pyr_get_perms_from_acl(struct pyr_acl_entry *);
-struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *,
-                                            const char *);
 void pyr_free_lib_policy_db(struct pyr_lib_policy_db **);
+
+struct pyr_profile;
+int pyr_deserialize_lib_policy(struct pyr_profile *profile,
+                               char *lp_str);
 
 #endif /* __PYR_LIBPOLICY_H */

@@ -1,9 +1,8 @@
 #!/bin/bash
 
-E2ETESTS=$HOME/libpyronia/libraries/libapparmor/testsuite
+E2ETESTS=$HOME/libpyronia/libapparmor/libraries/libapparmor/testsuite
 UNITTESTS=$HOME/pyronia-linux/security/pyronia/tests
 
-touch /tmp/cam0
 touch /tmp/cam1
 gcc -o $HOME/kernel_permissions_checker_test $E2ETESTS/kernel_permissions_checker.c
 cd $HOME

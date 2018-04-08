@@ -850,7 +850,7 @@ module_param_named(hash_policy, pyr_g_hash_policy, pyrbool, S_IRUSR | S_IWUSR);
 #endif
 
 /* Debug mode */
-bool pyr_g_debug;
+bool pyr_g_debug = PYR_TESTING;
 module_param_named(debug, pyr_g_debug, pyrbool, S_IRUSR | S_IWUSR);
 
 /* Audit mode */

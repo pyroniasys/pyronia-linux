@@ -664,9 +664,6 @@ static struct pyr_profile *unpack_profile(struct pyr_ext *e)
 
 	if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 		goto fail;
-
-	profile->port_id = 0;
-	profile->using_pyronia = 0;
 	
 	return profile;
 

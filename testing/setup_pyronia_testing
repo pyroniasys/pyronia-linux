@@ -4,4 +4,5 @@
 ./pyronia-linux/testing/load_test_profile
 ./pyronia-linux/testing/restart_pyronia
 
+touch /tmp/cam0
 echo "Don't forget to start the test TCP server."

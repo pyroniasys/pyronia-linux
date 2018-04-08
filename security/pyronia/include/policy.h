@@ -252,8 +252,10 @@ struct pyr_namespace *pyr_find_namespace(struct pyr_namespace *root,
 
 
 void pyr_free_replacedby_kref(struct kref *kref);
+int pyr_init_profile_lib_policy(struct pyr_profile *profile, u32 port_id);
 struct pyr_profile *pyr_alloc_profile(const char *name);
 struct pyr_profile *pyr_new_null_profile(struct pyr_profile *parent, int hat);
+void pyr_free_profile_lib_policy(struct pyr_profile *profile);
 void pyr_free_profile(struct pyr_profile *profile);
 void pyr_free_profile_kref(struct kref *kref);
 struct pyr_profile *pyr_find_child(struct pyr_profile *parent, const char *name);

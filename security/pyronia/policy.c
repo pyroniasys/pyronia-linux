@@ -577,6 +577,21 @@ void pyr_free_replacedby_kref(struct kref *kref)
 }
 
 /**
+ * Reset all library-level policy data stored in a profile.
+ * @profile: the profile whose library policy information to free
+ *
+ * This is used to reset a profile's library-level policy data
+ * when a task closes or when a profile is beign freed.
+ */
+void pyr_free_profile_lib_policy(struct pyr_profile *profile) {
+  if (profile && profile->using_pyronia) {
+    profile->using_pyronia = 0;
+    profile->port_id = 0;
+    pyr_free_lib_policy_db(&profile->lib_perm_db);
+  }
+}
+
+/**
  * pyr_free_profile - free a profile
  * @profile: the profile to free  (MAYBE NULL)
  *
@@ -593,6 +608,8 @@ void pyr_free_profile(struct pyr_profile *profile)
 	if (!profile)
 		return;
 
+	pyr_free_profile_lib_policy(profile);
+	
 	/* free children profiles */
 	policy_destroy(&profile->base);
 	pyr_put_profile(rcu_access_pointer(profile->parent));
@@ -609,7 +626,7 @@ void pyr_free_profile(struct pyr_profile *profile)
 	pyr_put_dfa(profile->xmatch);
 	pyr_put_dfa(profile->policy.dfa);
 	pyr_put_replacedby(profile->replacedby);
-
+	
 	kzfree(profile->hash);
 	kzfree(profile);
 }
@@ -638,6 +655,28 @@ void pyr_free_profile_kref(struct kref *kref)
 }
 
 /**
+ * pyr_init_profile_lib_policy - initialize the given profile
+ * to use the Pyronia library-level policies.
+ * @profile: The profile to initialize for Pyronia use (NOT NULL)
+ * @port_id: The confined application's Netlink port ID to communicate with
+ *
+ */
+int pyr_init_profile_lib_policy(struct pyr_profile *profile, u32 port_id) {
+  int err = 0;
+  
+  mutex_lock(&profile->ns->lock);
+  if (!profile->using_pyronia) {
+    profile->port_id = port_id;
+    profile->using_pyronia = 1;
+    if (!profile->lib_perm_db) {
+      err = pyr_new_lib_policy_db(&profile->lib_perm_db);
+    }
+  }
+  mutex_unlock(&profile->ns->lock);
+  return err;
+}
+
+/**
  * pyr_alloc_profile - allocate, initialize and return a new profile
  * @hname: name of the profile  (NOT NULL)
  *
@@ -660,6 +699,9 @@ struct pyr_profile *pyr_alloc_profile(const char *hname)
 	if (!policy_init(&profile->base, NULL, hname))
 		goto fail;
 
+	profile->port_id = 0;
+	profile->using_pyronia = 0;
+	
 	if (pyr_new_lib_policy_db(&profile->lib_perm_db))
 	  goto fail;
 

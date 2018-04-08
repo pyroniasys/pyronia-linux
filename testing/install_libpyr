@@ -1,7 +1,7 @@
 export SYSLIB=/usr/lib
 export SYSINC=/usr/include
 
-cd /home/pyronia/libpyronia/libraries/libpyronia
+cd /home/pyronia/libpyronia/src
 
 # compile pyronia userspace API library
 echo "================= Compiling pyronia user space library ================="

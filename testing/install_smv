@@ -1,7 +1,7 @@
 export SYSLIB=/usr/lib
 export SYSINC=/usr/include
 
-cd /home/pyronia/libpyronia/libraries/libsmv
+cd /home/pyronia/libpyronia/libsmv
 
 # compile smv userspace API library
 echo "================= Compiling user space library ================="

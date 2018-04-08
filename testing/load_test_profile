@@ -1,7 +1,7 @@
 #!/bin/bash
 
-sudo cp /home/pyronia/libpyronia/libraries/libapparmor/testsuite/home.pyronia.kernel_permissions_checker_test /etc/pyronia.d
+sudo cp /home/pyronia/libpyronia/libapparmor/libraries/libapparmor/testsuite/home.pyronia.kernel_permissions_checker_test /etc/pyronia.d
 sudo apparmor_parser -r /etc/pyronia.d/home.pyronia.kernel_permissions_checker_test
 
-sudo cp /home/pyronia/libpyronia/libraries/libpyronia/testsuite/home.pyronia.kernel_upcall_test /etc/pyronia.d
+sudo cp /home/pyronia/libpyronia/testsuite/home.pyronia.kernel_upcall_test /etc/pyronia.d
 sudo apparmor_parser -r /etc/pyronia.d/home.pyronia.kernel_upcall_test

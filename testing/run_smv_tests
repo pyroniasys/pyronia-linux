@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SRCDIR=$HOME/libpyronia/libraries/libsmv/testcases
+SRCDIR=$HOME/libpyronia/libsmv/testcases
 
 if [ $# -ne 1 ];
 then

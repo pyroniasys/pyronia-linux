@@ -40,22 +40,6 @@ int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib,
     return -1;
 }
 
-// Gets the permissions for the given resource from the library's policy
-static u32 get_perms_for_name(struct pyr_lib_policy * policy,
-                              const char *name) {
-
-    struct pyr_acl_entry *acl = pyr_find_lib_acl_entry(policy, name);
-
-    // we don't have an entry in our ACL for this `name`,
-    // so the library doesn't have any permissions to access `name`.
-    // default-deny policy
-    if (acl == NULL) {
-        return 0;
-    }
-
-    return pyr_get_perms_from_acl(acl);
-}
-
 // Traverse the given callgraph computing each module's permissions
 // at each frame, and return the effective permission
 int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
@@ -65,48 +49,32 @@ int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
     pyr_cg_node_t *cur_node = callgraph;
     int err = 0;
     u32 eff_perm = 0;
-    struct pyr_lib_policy *cur_policy;
 
     PYR_DEBUG("Callgraph - Computing permissions for %s... \n", name);
 
-    // want effective permission to start as root library in callgraph
-    cur_policy = pyr_find_lib_policy(lib_policy_db, cur_node->lib);
-
-    // something seriously went wrong if we don't have the root lib
-    // in our policy DB
-    if (cur_policy == NULL) {
-        // TODO: throw some big error here
-        err = -1;
-        goto out;
-    }
-
-    eff_perm = get_perms_for_name(cur_policy, name);
+    eff_perm = pyr_get_lib_perms(lib_policy_db, cur_node->lib, name);
 
     PYR_DEBUG("Callgraph - Initial permissions for %s: %d\n", name, eff_perm);
 
-    // bail early since the root already doesn't have permission
-    // to access name
-    if (eff_perm == 0) {
+    // a return value of TRANSITIVE_LIB_POLICY from pyr_get_lib_perms
+    // means that we don't have a policy for the library.
+    // In this initial call, it means the root already doesn't have
+    // permission to access name, so let's bail early
+    if (eff_perm == TRANSITIVE_LIB_POLICY) {
         goto out;
     }
 
     cur_node = callgraph->child;
     while (cur_node != NULL) {
-        cur_policy = pyr_find_lib_policy(lib_policy_db, cur_node->lib);
+        // take the intersection of the permissions
+        eff_perm &= pyr_get_lib_perms(lib_policy_db, cur_node->lib, name);
 
-        // if we don't have an explicit policy for this library,
-        // inherit the current effective permissions, otherwise adjust
-        if (cur_policy != NULL) {
-            // take the intersection of the permissions
-            eff_perm &= get_perms_for_name(cur_policy, name);
+        PYR_DEBUG("Callgraph - Current effective permissions for %s: %d\n", name, eff_perm);
 
-            PYR_DEBUG("Callgraph - Current effective permissions for %s: %d\n", name, eff_perm);
-
-            // bail early since the callgraph so far already doesn't have
-            // access to `name`
-            if (eff_perm == 0) {
-                goto out;
-            }
+        // bail early since the callgraph so far already doesn't have
+        // access to `name`
+        if (eff_perm == 0) {
+            goto out;
         }
 
         cur_node = cur_node->child;
@@ -163,19 +131,19 @@ int pyr_deserialize_callstack(pyr_cg_node_t **root, char *cs_str) {
             goto fail;
         }
         // the string we receive is ordered from CG root to leaf
-	// so we need to re-assign the last node's child to the new node
-	// before the next iteration
-	if (cur_node == NULL) {
-	  cur_node = next_node;
-	  *root = cur_node;
-	}
-	else{
-	  cur_node->child = next_node;
-	  cur_node = cur_node->child;	
-	}
+        // so we need to re-assign the last node's child to the new node
+        // before the next iteration
+        if (cur_node == NULL) {
+          cur_node = next_node;
+          *root = cur_node;
+        }
+        else{
+          cur_node->child = next_node;
+          cur_node = cur_node->child;
+        }
         next_node = NULL;
-	
-	next_lib = strsep(&cs_str, CALLSTACK_STR_DELIM);
+
+        next_lib = strsep(&cs_str, CALLSTACK_STR_DELIM);
         count++;
     }
 
@@ -192,7 +160,7 @@ int pyr_deserialize_callstack(pyr_cg_node_t **root, char *cs_str) {
         pyr_free_callgraph(&cur_node);
     if (*root)
         pyr_free_callgraph(root);
-    
+
     *root = NULL;
     return err;
 }

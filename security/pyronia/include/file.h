@@ -180,6 +180,8 @@ int pyr_path_link(struct pyr_profile *profile, struct dentry *old_dentry,
 
 int pyr_file_perm(int op, struct pyr_profile *profile, struct file *file,
 		 u32 request);
+u32 pyr_get_allow_file_perms(struct pyr_profile *profile,
+                             const char* name);
 
 static inline void pyr_free_file_rules(struct pyr_file_rules *rules)
 {
