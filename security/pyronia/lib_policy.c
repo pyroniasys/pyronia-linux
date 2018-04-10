@@ -25,23 +25,22 @@ static void free_acl_entry(struct pyr_acl_entry **entry) {
       return;
     }
 
-    if (e->next == NULL) {
-        switch (e->entry_type) {
-        case(resource_entry):
-	  kvfree(e->target.fs_resource.name);
-            break;
-        case(net_entry):
-	    kvfree(e->target.net_dest.name);
-            break;
-        default:
-            // FIXME: set errno here or something
-            break;
-        }
-        kvfree(e);
+    if (e->next != NULL) {
+      free_acl_entry(&e->next);
     }
-    else {
-        free_acl_entry(&(e->next));
+
+    switch (e->entry_type) {
+    case(resource_entry):
+      kvfree(e->target.fs_resource.name);
+      break;
+    case(net_entry):
+      kvfree(e->target.net_dest.name);
+      break;
+    default:
+      // FIXME: set errno here or something
+      break;
     }
+    kvfree(e);    
     *entry = NULL;
 }
 
@@ -52,15 +51,14 @@ static void free_lib_policy(struct pyr_lib_policy **policy) {
     if (p == NULL) {
       return;
     }
+        
+    if (p->next != NULL) {
+      free_lib_policy(&p->next);
+    }
 
-    if (p->next == NULL) {
-        kvfree(p->lib);
-        free_acl_entry(&(p->acl));
-        kvfree(p);
-    }
-    else {
-        free_lib_policy(&(p->next));
-    }
+    kvfree(p->lib);
+    free_acl_entry(&p->acl);
+    kvfree(p);
     *policy = NULL;
 }
 
@@ -72,17 +70,13 @@ static int set_acl_entry(struct pyr_acl_entry *entry,
     entry->entry_type = entry_type;
     switch(entry->entry_type) {
         case(resource_entry):
-	    if (!entry->target.fs_resource.name) {
-	        entry->target.fs_resource.name = kvzalloc(strlen(name)+1);
-	        memcpy(entry->target.fs_resource.name, name, strlen(name));
-	    }
+	    if (set_str(name, &entry->target.fs_resource.name))
+	        goto fail;
             entry->target.fs_resource.perms = perms;
             break;
         case(net_entry):
-	    if (!entry->target.net_dest.name) {
-	        entry->target.net_dest.name = kvzalloc(strlen(name)+1);
-	        memcpy(entry->target.net_dest.name, name, strlen(name));
-	    }
+	    if (set_str(name, &entry->target.net_dest.name))
+	        goto fail;
             entry->target.net_dest.op = perms;
             break;
         default:
@@ -118,6 +112,8 @@ static int pyr_add_acl_entry(struct pyr_acl_entry **acl,
     new_entry->next = *acl;
     *acl = new_entry;
 
+    PYR_DEBUG("[%s] Added ACL entry %p for %s, next %p\n", __func__, *acl, name, (*acl)->next);
+    
     return 0;
  fail:
     if (new_entry)
@@ -207,14 +203,19 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db *policy_db,
 
     policy = pyr_find_lib_policy(policy_db, lib);
     if (!policy) {
-        PYR_DEBUG("[%s] Creating new policy for library %s\n", __func__, lib);
         policy = kvzalloc(sizeof(struct pyr_lib_policy));
         if (!policy) {
             PYR_ERROR("[%s] no mem for %s policy\n", __func__, lib);
             goto fail;
         }
-        policy->lib = kvzalloc(strlen(lib)+1);
-	memcpy(policy->lib, lib, strlen(lib));
+	if (set_str(lib, &policy->lib))
+	  goto fail;
+	policy->acl = NULL;
+	policy->next = NULL;
+
+	// insert at head of linked list
+	policy->next = policy_db->perm_db_head;
+	policy_db->perm_db_head = policy;
     }
 
     acl = pyr_find_acl_entry(policy->acl, name);
@@ -228,17 +229,18 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db *policy_db,
         // ignore the new perms if the entry types conflict, but don't
         // throw an error
         if (policy->acl->entry_type != entry_type) {
-            goto out;
+	  PYR_ERROR("[%s] Oops, attempting to modify the entry type for %s\n", __func__, name);
+	  goto out;
         }
 
+	PYR_DEBUG("[%s] Changing ACL entry for %s\n", __func__, name);
         if (set_acl_entry(policy->acl, entry_type, name, perms))
             goto fail;
     }
 
-    // insert at head of linked list
-    policy->next = policy_db->perm_db_head;
-    policy_db->perm_db_head = policy;
+    PYR_DEBUG("[%s] Added policy %p for %s, next %p\n", __func__, policy_db->perm_db_head, lib, policy_db->perm_db_head->next);
 
+    
  out:
     return 0;
  fail:
@@ -288,6 +290,9 @@ u32 pyr_get_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
     struct pyr_lib_policy *policy;
     struct pyr_acl_entry *acl;
 
+    if (!lib_policy_db)
+      return 0;
+    
     // we don't have a policy for this `lib`, so
     // uphold our default-deny policy
     policy = pyr_find_lib_policy(lib_policy_db, lib);
@@ -315,6 +320,9 @@ u32 pyr_get_default_perms(struct pyr_lib_policy_db *lib_policy_db,
                           const char *name) {
     struct pyr_acl_entry *acl;
 
+    if (!lib_policy_db)
+      return 0;
+    
     acl = pyr_find_acl_entry(lib_policy_db->defaults, name);
 
     // we don't have an entry in our ACL for this `name`,
@@ -366,17 +374,23 @@ int pyr_new_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
 // Recursively frees all lib policies and their ACL entries
 void pyr_free_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
     struct pyr_lib_policy_db *db = *policy_db;
-    free_lib_policy(&(db->perm_db_head));
-    free_acl_entry(&(db->defaults));
+    
+    if (db == NULL)
+      return;
+
+    free_lib_policy(&db->perm_db_head);
+    free_acl_entry(&db->defaults);
+    kvfree(db);
     *policy_db = NULL;
 }
 
 // Deserialize a lib policy string received from userspace
+// profile is NOT NULL
 int pyr_deserialize_lib_policy(struct pyr_profile *profile,
                                char *lp_str) {
-    int err;
+    int err = 0;
     char *next_rule, *num_str, *next_lib, *next_name;
-    u32 num_rules, next_perms, count = 0;
+    u32 num_rules = 0, next_perms = 0, count = 0;
     enum acl_entry_type next_type;
     
     // first token in the string is the number of lib policy
@@ -392,7 +406,6 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
 
     next_rule = strsep(&lp_str, LIB_RULE_STR_DELIM);
     while(next_rule && count < num_rules) {
-      //PYR_DEBUG("[%s] Next rule to parse: %s\n", __func__, next_rule);
         next_lib = strsep(&next_rule, RESOURCE_STR_DELIM);
         if (!next_lib) {
             PYR_ERROR("[%s] Malformed lib in policy rule %s\n", __func__,
@@ -446,8 +459,11 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
 
     // the string was somehow corrupted b/c we got fewer valid rules than
     // originally indicated
-    if (num_rules > 0 && count < num_rules)
+    if (num_rules > 0 && count < num_rules) {
+        PYR_ERROR("[%s] Expected %d, got %d rules\n", __func__, num_rules, count);
+	err = -1;
         goto fail;
+    }
 
     return 0;
  fail:

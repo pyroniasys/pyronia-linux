@@ -629,6 +629,21 @@ fail:
 	goto out;
 }
 
+/**
+ * pyr_task_free - perform any task exit cleanup
+ * @task: the task for which to do Pyronia-related clenaup
+ */
+static void pyronia_task_free(struct task_struct *task) {
+  struct pyr_profile *profile;
+  
+  profile = pyr_get_task_profile(task);
+  if (!profile) {
+    return;
+  }
+  
+  pyr_free_profile_lib_policy(profile);
+}
+
 static int pyronia_task_setrlimit(struct task_struct *task,
 		unsigned int resource, struct rlimit *new_rlim)
 {
@@ -796,6 +811,7 @@ static struct security_hook_list pyronia_hooks[] = {
 	LSM_HOOK_INIT(bprm_secureexec, pyronia_bprm_secureexec),
 
 	LSM_HOOK_INIT(task_setrlimit, pyronia_task_setrlimit),
+	LSM_HOOK_INIT(task_free, pyronia_task_free),
 };
 
 /*

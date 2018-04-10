@@ -234,6 +234,9 @@ u32 pyr_get_allow_file_perms(struct pyr_profile *profile,
     unsigned int state;
     u32 perms;
 
+    if (!profile || !name)
+      return 0;
+    
     state = pyr_dfa_match(profile->file.dfa, profile->file.start, name);
     perms = map_old_perms(dfa_user_allow(profile->file.dfa, state));
     perms |= PYR_MAY_META_READ;
@@ -295,8 +298,8 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 {
         char *buffer = NULL;
         struct file_perms perms = {};
-        u32 lib_perms;
-        const char *name, *info = NULL;
+        u32 lib_perms = 0;
+        const char *name = NULL, *info = NULL;
         int error;
 
         flags |= profile->path_flags | (S_ISDIR(cond->mode) ? PATH_IS_DIR : 0);

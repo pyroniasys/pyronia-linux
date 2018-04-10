@@ -122,4 +122,32 @@ static inline bool mediated_filesystem(struct dentry *dentry)
 	return !(dentry->d_sb->s_flags & MS_NOUSER);
 }
 
+/**
+ * set_str - copy the src string into the dest string 
+ * in a clean buffer. This is used to cleanly set the
+ * string fields in the various Pyronia data structures.
+ */
+static inline int set_str(const char *src, char **dest) {
+  char *str = NULL;
+  int err = 0;
+  
+  // let's make sure to not override a non-null
+  // destination
+  if (*dest)
+    return 0;
+
+  str = kvzalloc(strlen(src)+1);
+  if (!str) {
+    err = -1;
+    goto out;
+  }
+
+  memset(str, 0, strlen(src)+1);
+  memcpy(str, src, strlen(src));
+  
+ out:
+  *dest = str;
+  return err;
+}
+
 #endif /* __PYRONIA_H */

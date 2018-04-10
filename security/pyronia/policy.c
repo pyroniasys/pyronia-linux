@@ -584,11 +584,17 @@ void pyr_free_replacedby_kref(struct kref *kref)
  * when a task closes or when a profile is beign freed.
  */
 void pyr_free_profile_lib_policy(struct pyr_profile *profile) {
-  if (profile && profile->using_pyronia) {
+  if (!profile)
+    return;
+
+  mutex_lock(&profile->ns->lock);
+  if (profile->using_pyronia) {
+    PYR_DEBUG("[%s] Pyronia cleanup\n", __func__);
     profile->using_pyronia = 0;
     profile->port_id = 0;
     pyr_free_lib_policy_db(&profile->lib_perm_db);
   }
+  mutex_unlock(&profile->ns->lock);
 }
 
 /**

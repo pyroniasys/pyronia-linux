@@ -38,26 +38,30 @@ static struct genl_family si_comm_gnl_family = {
 };
 
 static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
-    struct sk_buff *skb;
-    void *msg_head;
+    struct sk_buff *skb = NULL;
+    void *msg_head = NULL;
     int ret = -1;
     char buf[12];
+    u16 flags = 0;
 
      // allocate the message memory
     skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
     if (skb == NULL) {
-        printk(KERN_ERR "[%s] Could not allocate skb for cmd message %d for port %d\n",
-               __func__, cmd, port_id);
+        PYR_ERROR("[%s] Could not allocate skb for cmd message %d for port %d\n",
+		  __func__, cmd, port_id);
         goto out;
     }
 
+    if (cmd == SI_COMM_C_STACK_REQ && attr == SI_COMM_A_KERN_REQ) {
+      flags |= NLM_F_REQUEST;
+    }
+    
     //Create the message headers
-    msg_head = genlmsg_put(skb, 0, 0, &si_comm_gnl_family,
-                           0, cmd);
-
+    msg_head = genlmsg_put(skb, 0, 0, &si_comm_gnl_family, flags, cmd);
+    
     if (msg_head == NULL) {
         ret = -ENOMEM;
-        printk("[%s] genlmsg_put() returned error for %d\n", __func__, port_id);
+        PYR_ERROR("[%s] genlmsg_put() returned error for %d\n", __func__, port_id);
         goto out;
     }
 
@@ -65,7 +69,7 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
       // create the message
       ret = nla_put_u8(skb, attr, STACK_REQ_CMD);
       if (ret != 0) {
-        printk(KERN_ERR "[%s] Could not create the message for %d\n", __func__, port_id);
+        PYR_ERROR("[%s] Could not create the message for %d\n", __func__, port_id);
         goto out;
       }
     }
@@ -78,19 +82,16 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
 
     // finalize the message
     genlmsg_end(skb, msg_head);
-
+    
     // send the message
-    ret = nlmsg_unicast(init_net.genl_sock, skb, port_id);
+    ret = genlmsg_unicast(&init_net, skb, port_id);
     if (ret < 0) {
-        printk("[%s] Error %d sending message to %d\n", __func__, ret, port_id);
+        PYR_ERROR("[%s] Error %d sending message to %d\n", __func__, ret, port_id);
         goto out;
     }
     ret = 0;
-
+    
  out:
-    if (ret) {
-        // TODO: release the kraken here
-    }
     return ret;
 }
 
@@ -100,7 +101,7 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
  * Expects the caller to hold the stack_request lock. */
 pyr_cg_node_t *pyr_stack_request(u32 pid)
 {
-    int err;
+    int err = 0;
     pyr_cg_node_t *cg = NULL;
 
     if (!pid) {
@@ -110,8 +111,6 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
 
     callstack_req->port_id = pid;
 
-    PYR_DEBUG("[%s] Requesting callstack from runtime at %d\n", __func__, callstack_req->port_id);
-
     err = send_to_runtime(callstack_req->port_id, SI_COMM_C_STACK_REQ,
                           SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
 
@@ -119,14 +118,13 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
       goto out;
     }
 
-    callstack_req->runtime_responded = 0;
-
+    callstack_req->runtime_responded = 0;    
     wait_event_interruptible(callstack_req_waitq, callstack_req->runtime_responded == 1);
 
     if (!callstack_req->cg_buf) {
       goto out;
     }
-
+    
     // deserialize the callstack we've received from userland
     if (pyr_deserialize_callstack(&cg, callstack_req->cg_buf)) {
         goto out;
@@ -175,7 +173,7 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
         printk(KERN_CRIT "no info->attrs %i\n", SI_COMM_A_USR_MSG);
 
     /* Parse the received message here */
-    PYR_DEBUG("[%s] Received registration message: %s\n", __func__, msg);
+    printk(KERN_INFO "[%s] Received registration message: %s\n", __func__, msg);
     
     // the first token in our message should contain the
     // SI port for the sender application
@@ -196,19 +194,19 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
       tsk = pid_task(find_vpid(snd_port), PIDTYPE_PID);
       if (!tsk) {
         valid_pid = 0;
-	PYR_DEBUG("couldn't find task with sender PID\n");
+	PYR_ERROR("[%s] couldn't find task with sender PID\n", __func__);
         goto out;
       }
       profile = pyr_get_task_profile(tsk);
       if (!profile) {
         valid_pid = 0;
-	PYR_DEBUG("couldn't find profile for the task\n");
+	PYR_ERROR("[%s] couldn't find profile for the task\n", __func__);
         goto out;
       }
       err = pyr_init_profile_lib_policy(profile, snd_port);
       if (err) {
 	valid_pid = 0;
-	PYR_DEBUG("couldn't init lib policy db for the task\n");
+	PYR_ERROR("[%s] couldn't init lib policy db for the task\n", __func__);
 	goto out;
       }
       // load the library policy with the remaining message
@@ -216,7 +214,7 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
       err = pyr_deserialize_lib_policy(profile, msg);
       mutex_unlock(&profile->ns->lock);
       if (err) {
-	PYR_DEBUG("couldn't deserialize lib policy\n");
+	PYR_ERROR("[%s] couldn't deserialize lib policy\n", __func__);
 	valid_pid = 0;
 	goto out;
       }
@@ -247,30 +245,31 @@ static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
 
   if (info == NULL)
     goto out;
-
+  
   /* for each attribute there is an index in info->attrs which points
    * to a nlattr structure in this structure the data is given */
   na = info->attrs[SI_COMM_A_USR_MSG];
   if (na) {
     mydata = (char *)nla_data(na);
     if (mydata == NULL)
-      printk(KERN_ERR "[%s] error while receiving data\n", __func__);
+      PYR_ERROR("[%s] error while receiving data\n", __func__);
   }
   else
-    printk(KERN_CRIT "[%s] no info->attrs %i\n", __func__, SI_COMM_A_USR_MSG);
+    PYR_ERROR("[%s] no info->attrs %i\n", __func__, SI_COMM_A_USR_MSG);
 
 
   if (info->snd_portid != callstack_req->port_id) {
     // this is going to cause the callstack request to continue blocking
-    PYR_DEBUG("[%s] Inconsistent runtime IDs. Got %d, expected %d\n", __func__, callstack_req->port_id, info->snd_portid);
+    PYR_ERROR("[%s] Inconsistent runtime IDs. Got %d, expected %d\n", __func__, callstack_req->port_id, info->snd_portid);
     goto out;
   }
 
   memcpy(callstack_req->cg_buf, mydata, MAX_RECV_LEN);
-  callstack_req->runtime_responded = 1;
-  wake_up_interruptible(&callstack_req_waitq);
 
  out:
+  send_to_runtime(info->snd_portid, SI_COMM_C_STACK_REQ, SI_COMM_A_USR_MSG, 0);
+  callstack_req->runtime_responded = 1;
+  wake_up_interruptible(&callstack_req_waitq);
   return 0;
 }
 
@@ -323,7 +322,7 @@ static int __init pyr_kernel_comm_init(void)
       goto fail;
     }
 
-    PYR_DEBUG("[%s] Initialized SI communication channel\n", __func__);
+    printk(KERN_INFO "[%s] Initialized SI communication channel\n", __func__);
     return 0;
 
 fail:
@@ -344,7 +343,7 @@ static void __exit pyr_kernel_comm_exit(void)
 
     pyr_callstack_request_free(&callstack_req);
 
-    PYR_DEBUG("[%s] SI channel teardown complete\n", __func__);
+    printk(KERN_INFO "[%s] SI channel teardown complete\n", __func__);
 }
 
 
