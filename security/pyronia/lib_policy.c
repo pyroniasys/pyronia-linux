@@ -133,12 +133,12 @@ static struct pyr_acl_entry *pyr_find_acl_entry(struct pyr_acl_entry *start,    
         // on each before we determine if we've found the requested ACL entry
         switch (runner->entry_type) {
         case(resource_entry):
-            if (!strncmp(runner->target.fs_resource.name, name, strlen(name))) {
+            if (!strncmp(runner->target.fs_resource.name, name, strlen(runner->target.fs_resource.name))) {
                 return runner;
             }
             break;
         case(net_entry):
-            if (!strncmp(runner->target.net_dest.name, name, strlen(name))) {
+            if (!strncmp(runner->target.net_dest.name, name, strlen(runner->target.net_dest.name))) {
                 return runner;
             }
             break;
@@ -163,7 +163,7 @@ static struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *pol
     struct pyr_lib_policy *runner = policy_db->perm_db_head;
 
     while (runner != NULL) {
-        if (!strncmp(runner->lib, lib, strlen(lib))) {
+        if (!strncmp(runner->lib, lib, strlen(runner->lib))) {
             return runner;
         }
         runner = runner->next;
