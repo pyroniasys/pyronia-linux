@@ -45,6 +45,13 @@ struct memdom_struct {
     unsigned long pgprot[SMV_ARRAY_SIZE]; // VMA page protection for each smv.
 };
 
+// Used to keep track of memdom-protected vmas.
+// this is an optimization for context_switch mprotects
+struct memdom_vma {
+    struct vm_area_struct *vma;
+    struct memdom_vma *next;
+};
+
 /// --- Functions called by the kernel internally to manage memory space --- ///
 #define allocate_memdom()   (kmem_cache_alloc(memdom_cachep, GFP_KERNEL))
 #define free_memdom(memdom) (kmem_cache_free(memdom_cachep, memdom))

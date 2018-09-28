@@ -54,6 +54,9 @@ enum x86_pf_error_code {
 /* Called by copy_pte_smv to locate the current pgd */
 #define pgd_offset_smv(mm, address, smv_id) ((mm)->pgd_smv[smv_id]  + pgd_index((address)))
 
+void set_pte_smv_protection(struct mm_struct *mm, unsigned long address,
+			    struct vm_area_struct *vma, int smv_id,
+			    unsigned long prot);
 int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_code);
 int copy_pgtable_smv(int dst_smv, int src_smv, 
                      unsigned long addr, unsigned int flags,

@@ -1680,6 +1680,7 @@ static inline void pte_lock_deinit(struct page *page)
 static inline spinlock_t *pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
 {
     if (mm->using_smv) {
+        printk(KERN_CRIT "[%s] Getting lock for SMV %d\n", __func__, current->smv_id);
         return &mm->page_table_lock_smv[current->smv_id];
     }
     else {

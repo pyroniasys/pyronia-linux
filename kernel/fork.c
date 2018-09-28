@@ -610,7 +610,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
     /* No memdom is allocated yet */
     bitmap_zero(mm->memdom_bitmapInUse, SMV_ARRAY_SIZE);
     /* Initialize mutex that protects smvs */
-    mutex_init(&mm->smv_metadataMutex);
+    init_rwsem(&mm->smv_metadataMutex);
     /* If the first element is NULL, then no smv is created yet */
     memset(mm->smv_metadata, 0, sizeof(struct smv_struct*)*SMV_ARRAY_SIZE);
     /* If the first element is NULL, then no memdom is created yet */
@@ -619,6 +619,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
     memset(mm->pgd_smv, 0, sizeof(pgd_t)*SMV_ARRAY_SIZE);
     mm->using_smv = 0;
     mm->standby_smv_id = -1;
+    mm->protected_vmas = NULL;
 
 	mm->mmap = NULL;
 	mm->mm_rb = RB_ROOT;
@@ -1500,6 +1501,8 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	if (current->mm) {
             // Could be -1 if it's not smv thread
             p->smv_id = current->mm->standby_smv_id;
+	    if (p->mm->using_smv && p->smv_id == -1)
+	      slog(KERN_ERR, "[%s] creating non-smv thread in smv-aware process %s (pid = %d)\n", __func__, current->comm, current->pid);
 	} else {
             p->smv_id = -1;
 	}

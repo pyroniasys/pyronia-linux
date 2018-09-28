@@ -412,7 +412,9 @@ struct mm_struct {
     /* Bookkeeping of per-process smv info */
     struct smv_struct *smv_metadata[SMV_ARRAY_SIZE];
     /* mutex protecting memdom/smv_metadata and memdom/smv_bitmap */
-    struct mutex smv_metadataMutex;
+    struct rw_semaphore smv_metadataMutex;
+    /* list of memdom-protected vmas */
+    struct memdom_vma *protected_vmas;
     /* set to 1 if current mm is using the secure memory view model */
     int using_smv;
     /* For smv_thread_create to tell the kernel what smv

@@ -63,7 +63,7 @@ void *__pyr_kvmalloc(size_t size, gfp_t flags);
 
 #define PYR_DEBUG(fmt, args...)						\
 	do {								\
-	  if (pyr_g_debug && printk_ratelimit())			\
+	  if (PYR_TESTING && printk_ratelimit())			\
 	    printk(KERN_DEBUG "Pyronia: " fmt, ##args);			\
 	} while (0)
 #define PYR_ERROR(fmt, args...)						\

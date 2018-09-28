@@ -536,9 +536,9 @@ void free_pgd_range(struct mmu_gather *tlb,
 
 	/* Use the smv id recorded in tlb to free pgtables */
 	if (tlb->mm->using_smv) {
-            mutex_lock(&tlb->mm->smv_metadataMutex);
+	    down_read(&tlb->mm->smv_metadataMutex);
             pgd = tlb->mm->pgd_smv[tlb->smv_id] + pgd_index(addr);
-            mutex_unlock(&tlb->mm->smv_metadataMutex);
+            up_read(&tlb->mm->smv_metadataMutex);
 	} else{
             pgd = pgd_offset(tlb->mm, addr);
 	}
@@ -1305,9 +1305,9 @@ void unmap_page_range(struct mmu_gather *tlb,
 	BUG_ON(addr >= end);
 	tlb_start_vma(tlb, vma);
 	if ( tlb->mm->using_smv ) {
-            mutex_lock(&tlb->mm->smv_metadataMutex);
+            down_read(&tlb->mm->smv_metadataMutex);
             pgd = tlb->mm->pgd_smv[tlb->smv_id] + pgd_index(addr);
-            mutex_unlock(&tlb->mm->smv_metadataMutex);
+            up_read(&tlb->mm->smv_metadataMutex);
 	} else{
             pgd = pgd_offset(vma->vm_mm, addr);
 	}
@@ -2178,12 +2178,18 @@ static int wp_page_copy(struct fault_env *fe, pte_t orig_pte,
 		new_page = alloc_zeroed_user_highpage_movable(vma, fe->address);
 		if (!new_page)
 			goto oom;
+		if (mm->using_smv) {
+		  slog(KERN_ERR, "[%s] new page is zero page smv %d at %p\n", __func__, current->smv_id, new_page);
+		}
 	} else {
 		new_page = alloc_page_vma(GFP_HIGHUSER_MOVABLE, vma,
 				fe->address);
 		if (!new_page)
 			goto oom;
 		cow_user_page(new_page, old_page, fe->address, vma);
+		if (mm->using_smv) {
+		  slog(KERN_ERR, "[%s] cow'd page for smv %d from %p to %p\n", __func__, current->smv_id, old_page, new_page);
+		}
 	}
 
 	if (mem_cgroup_try_charge(new_page, mm, GFP_KERNEL, &memcg, false))
@@ -2883,7 +2889,7 @@ static int __do_fault(struct fault_env *fe, pgoff_t pgoff,
 
 	ret = vma->vm_ops->fault(vma, &vmf);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY)))
-		return ret;
+	  return ret;
 	if (ret & VM_FAULT_DAX_LOCKED) {
 		*entry = vmf.entry;
 		return ret;
@@ -3243,7 +3249,7 @@ static int do_cow_fault(struct fault_env *fe, pgoff_t pgoff)
 		put_page(new_page);
 		return VM_FAULT_OOM;
 	}
-
+	
 	ret = __do_fault(fe, pgoff, new_page, &fault_page, &fault_entry);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY)))
 		goto uncharge_out;
@@ -3253,10 +3259,11 @@ static int do_cow_fault(struct fault_env *fe, pgoff_t pgoff)
 	__SetPageUptodate(new_page);
 
 	ret |= alloc_set_pte(fe, memcg, new_page);
-	if (fe->pte)
-		pte_unmap_unlock(fe->pte, fe->ptl);
+	if (fe->pte) {
+	        pte_unmap_unlock(fe->pte, fe->ptl);
+	}
 	if (!(ret & VM_FAULT_DAX_LOCKED)) {
-		unlock_page(fault_page);
+	        unlock_page(fault_page);
 		put_page(fault_page);
 	} else {
 		dax_unlock_mapping_entry(vma->vm_file->f_mapping, pgoff);
@@ -3507,7 +3514,7 @@ static inline bool vma_is_accessible(struct vm_area_struct *vma)
 static int handle_pte_fault(struct fault_env *fe)
 {
 	pte_t entry;
-
+	
 	if (unlikely(pmd_none(*fe->pmd))) {
 		/*
 		 * Leave __pte_alloc() until later: because vm_ops->fault may
@@ -3553,7 +3560,7 @@ static int handle_pte_fault(struct fault_env *fe)
 	if (!fe->pte) {
             if (vma_is_anonymous(fe->vma)) {
                 if (fe->vma->vm_mm->using_smv) {
-                    slog(KERN_INFO, "[%s] addr 0x%16lx !fe->pte, calling do_anonymous_page\n", __func__, fe->address);
+                    printk(KERN_INFO "[%s] addr 0x%16lx !fe->pte, calling do_anonymous_page\n", __func__, fe->address);
                 }
                 return do_anonymous_page(fe);
             }
@@ -3636,8 +3643,11 @@ static int __handle_mm_fault(struct vm_area_struct *vma,
 
         int rv = 0;
 
-        /* SMV threads should use main thread's pgd to record fault.
-	 * Pthreads (smv_id == -1) should still use pgd_offset
+        /* SMV threads should use main thread's pgd to record fault,
+	 * unless this is a write fault, in which case, we need to
+	 * allow the fault handler to COW the actual faulting thread's
+	 * page. We do not update the main thread's page table in this case.
+	 * Pthreads (smv_id == -1) should use pgd_offset
 	 */
 	if (mm->using_smv && current->smv_id >= MAIN_THREAD) {
             pgd = pgd_offset_smv(mm, fe.address, MAIN_THREAD);
@@ -3694,9 +3704,10 @@ static int __handle_mm_fault(struct vm_area_struct *vma,
 	if (mm->using_smv && current->smv_id >= MAIN_THREAD) {
             /* Only copy page table to current smv if
                handle_pte_fault succeeds (this includes a page fault
-	       where the pte was allocated or cowed). MAIN_THREAD will return
+	       where the pte was allocated). MAIN_THREAD will return
                immediately as it doesn't have to copy its own pgtables. */
-	  if (rv == 0 || rv == VM_FAULT_NOPAGE || rv == VM_FAULT_WRITE) {
+	  if (rv == 0 || rv == VM_FAULT_NOPAGE || rv == VM_FAULT_WRITE ||
+	      rv == VM_FAULT_LOCKED) {
 	    /* FIXME: just pass pte to copy_pgtable_smv? */
 	    copy_pgtable_smv(current->smv_id, MAIN_THREAD,
 			     address, fe.flags, vma);
@@ -3712,10 +3723,11 @@ static int __handle_mm_fault(struct vm_area_struct *vma,
 	    /*slog(KERN_INFO, "[%s] smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx\n",
 	      __func__, current->smv_id, pgd_val(*pgd), pud_val(*pud), pmd_val(*fe.pmd));*/
 	  }
-	  /*slog(KERN_INFO, "[%s] cr3: 0x%16lx, smv %d: mm->pgd: %p, mm->pgd_smv[%d]: %p, mm->pgd_smv[MAIN_THREAD]: %p\n",
+	  slog(KERN_INFO, "[%s] cr3: 0x%16lx, smv %d: mm->pgd: %p, mm->pgd_smv[%d]: %p, mm->pgd_smv[MAIN_THREAD]: %p, rss_stat.counter[MM_ANONPAGES]: %d\n",
 	       __func__, read_cr3(), current->smv_id, mm->pgd,
 	       current->smv_id, mm->pgd_smv[current->smv_id],
-	       mm->pgd_smv[MAIN_THREAD]);*/
+	       mm->pgd_smv[MAIN_THREAD],
+	       atomic_long_read(&mm->rss_stat.count[MM_ANONPAGES]));
 	}
         return rv;
 }

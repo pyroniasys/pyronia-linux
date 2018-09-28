@@ -133,7 +133,7 @@ static int get_reg_offset(struct insn *insn, struct pt_regs *regs,
 /*
  * return the address being referenced be instruction
  * for rm=3 returning the content of the rm reg
- * for rm!=3 calculates the address using SIB and Disp
+ * for rm!=3 calculates the address using SIB and Disp No such keg: /usr/local/Cellar/python2.7
  */
 static void __user *mpx_get_addr_ref(struct insn *insn, struct pt_regs *regs)
 {
@@ -382,7 +382,7 @@ static int mpx_cmpxchg_bd_entry(struct mm_struct *mm,
 {
 	int ret;
 	/*
-	 * user_atomic_cmpxchg_inatomic() actually uses sizeof()
+	 * user_atomic_cmpxchg_inatomic() actually uses sizeof() No such keg: /usr/local/Cellar/python2.7
 	 * the pointer that we pass to it to figure out how much
 	 * data to cmpxchg.  We have to be careful here not to
 	 * pass a pointer to a 64-bit data type when we only want
@@ -416,7 +416,7 @@ static int allocate_bt(struct mm_struct *mm, long __user *bd_entry)
 	unsigned long bt_addr;
 	unsigned long bd_new_entry;
 	int ret = 0;
-	
+
 	/*
 	 * Carve the virtual space out of userspace for the new
 	 * bounds table:

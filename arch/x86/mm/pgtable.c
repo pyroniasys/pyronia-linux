@@ -359,7 +359,7 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 {
 	pgd_t *pgd;
 	pmd_t *pmds[PREALLOCATED_PMDS];
-
+	
 	pgd = _pgd_alloc();
 
 	if (pgd == NULL)
@@ -375,19 +375,19 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 
 	if (paravirt_pgd_alloc(mm) != 0)
 		goto out_free_pmds;
-
+	
 	/*
 	 * Make sure that pre-populating the pmds is atomic with
 	 * respect to anything walking the pgd_list, so that they
 	 * never see a partially populated pgd.
 	 */
 	spin_lock(&pgd_lock);
-
+	
 	pgd_ctor(mm, pgd);
 	pgd_prepopulate_pmd(mm, pgd, pmds);
 
 	spin_unlock(&pgd_lock);
-
+	
 	return pgd;
 
 out_free_pmds:

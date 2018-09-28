@@ -227,7 +227,7 @@ static unsigned long change_protection_range(struct task_struct *tsk,
 	unsigned long pages = 0;
 
 	BUG_ON(addr >= end);
-	if (mm->using_smv && tsk->smv_id >= MAIN_THREAD) {
+	if (mm->using_smv && tsk->smv_id > MAIN_THREAD) {
 	  slog(KERN_INFO, "[%s] for smv %d in memdom %d\n", __func__, tsk->smv_id, vma->memdom_id);
 	  pgd = pgd_offset_smv(mm, addr, tsk->smv_id);
 	}

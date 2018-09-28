@@ -29,7 +29,7 @@ int smv_main_init(void){
         printk(KERN_ERR "[%s] current task does not have mm\n", __func__);
         return -1;
     }
-    slog(KERN_INFO, "[%s] ------------------ %s pid %d ------------------\n", __func__, current->comm, current->pid);
+    printk(KERN_INFO "[%s] ------------------ %s pid %d ------------------\n", __func__, current->comm, current->pid);
     /* Mark this mm descriptor as using smv */
     mm->using_smv = 1;
 
@@ -47,25 +47,23 @@ int smv_main_init(void){
       printk(KERN_ERR "[%s] memdom %d not available for main thread\n", __func__, MAIN_THREAD);
       return -1;
     }
-
+    
+    /* Initialize mm-related metadata */
+    down_write(&mm->smv_metadataMutex);
+    mm->pgd_smv[MAIN_THREAD] = mm->pgd; // record the main thread's pgd
+    mm->page_table_lock_smv[MAIN_THREAD] = mm->page_table_lock; // record the main thread's pgtable lock
     current->smv_id = MAIN_THREAD;       // main thread is using MAIN_THREAD-th (0) smv_id
     current->mmap_memdom_id = MAIN_THREAD;  // main thread is using MAIN_THREAD-th (0) as mmap_id
     
+    /* make all existing vma in memdom_id: MAIN_THREAD */
+    memdom_claim_all_vmas(MAIN_THREAD);
+    
+    up_write(&mm->smv_metadataMutex);
+
     /* Make the global smv join the global memdom with full privileges */
     smv_join_memdom(memdom_id, smv_id);
     memdom_priv_add(memdom_id, smv_id, MEMDOM_READ | MEMDOM_WRITE | MEMDOM_EXECUTE | MEMDOM_ALLOCATE);
 
-    /* Initialize mm-related metadata */
-    mutex_lock(&mm->smv_metadataMutex);
-    mm->pgd_smv[MAIN_THREAD] = mm->pgd; // record the main thread's pgd
-    mm->page_table_lock_smv[MAIN_THREAD] = mm->page_table_lock; // record the main thread's pgtable lock
-
-    /* make all existing vma in memdom_id: MAIN_THREAD */
-    memdom_claim_all_vmas(MAIN_THREAD);
-    
-    mutex_unlock(&mm->smv_metadataMutex);
-
-    //return memdom_mprotect_all_vmas(memdom_id, smv_id);
     return 0;
 }
 EXPORT_SYMBOL(smv_main_init);
@@ -77,7 +75,7 @@ int smv_create(void){
     struct smv_struct *smv = NULL;
 
     /* SMP: protect shared smv bitmap */
-    mutex_lock(&mm->smv_metadataMutex);
+    down_write(&mm->smv_metadataMutex);
 
     slog(KERN_INFO, "[%s] Before smv_create mm: %p, nr_pmds: %ld, nr_ptes: %ld\n",
             __func__, mm, atomic_long_read(&mm->nr_pmds), atomic_long_read(&mm->nr_ptes));
@@ -111,7 +109,7 @@ int smv_create(void){
     /* Increase total number of smv count in mm_struct */
     atomic_inc(&mm->num_smvs);
 
-    slog(KERN_INFO, "Created new smv with ID %d, #smvs: %d / %d\n",
+    printk(KERN_INFO "Created new smv with ID %d, #smvs: %d / %d\n",
             smv_id, atomic_read(&mm->num_smvs), SMV_ARRAY_SIZE);
     goto out;
 
@@ -122,7 +120,7 @@ out:
     slog(KERN_INFO, "[%s] After smv_create mm: %p, nr_pmds: %ld, nr_ptes: %ld\n",
             __func__, mm, atomic_long_read(&mm->nr_pmds), atomic_long_read(&mm->nr_ptes));
 
-    mutex_unlock(&mm->smv_metadataMutex);
+    up_write(&mm->smv_metadataMutex);
     return smv_id;
 }
 EXPORT_SYMBOL(smv_create);
@@ -144,7 +142,7 @@ int smv_kill(int smv_id, struct mm_struct *mm){
     }
 
     /* SMP: protect shared smv bitmap */
-    mutex_lock(&mm->smv_metadataMutex);
+    down_write(&mm->smv_metadataMutex);
     smv = mm->smv_metadata[smv_id];
 
     slog(KERN_INFO, "[%s] killing smv metadata %p with ID %d\n", __func__, smv, smv_id);
@@ -153,10 +151,10 @@ int smv_kill(int smv_id, struct mm_struct *mm){
     /* Clear smv_id-th bit in mm's smv_bitmapInUse */
     if( test_bit(smv_id, mm->smv_bitmapInUse) ) {
         clear_bit(smv_id, mm->smv_bitmapInUse);
-        mutex_unlock(&mm->smv_metadataMutex);
+        up_write(&mm->smv_metadataMutex);
     } else {
         printk(KERN_ERR "Error, trying to delete a smv that does not exist: smv %d, #smvs: %d\n", smv_id, atomic_read(&mm->num_smvs));
-        mutex_unlock(&mm->smv_metadataMutex);
+        up_write(&mm->smv_metadataMutex);
         return -1;
     }
 
@@ -185,10 +183,10 @@ int smv_kill(int smv_id, struct mm_struct *mm){
     free_smv(smv);
 
     /* Decrement smv count */
-    mutex_lock(&mm->smv_metadataMutex);
+    down_write(&mm->smv_metadataMutex);
     mm->smv_metadata[smv_id] = NULL;
     atomic_dec(&mm->num_smvs);
-    mutex_unlock(&mm->smv_metadataMutex);
+    up_write(&mm->smv_metadataMutex);
 
     slog(KERN_INFO, "[%s] Deleted smv with ID %d, #smvs: %d / %d\n",
             __func__, smv_id, atomic_read(&mm->num_smvs), SMV_ARRAY_SIZE);
@@ -218,15 +216,15 @@ int smv_join_memdom(int memdom_id, int smv_id){
         return -1;
     }
 
-    mutex_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
     memdom = current->mm->memdom_metadata[memdom_id];
     if( !memdom || !smv ) {
         printk(KERN_ERR "[%s] memdom %d: %p || smv %d: %p not found\n", __func__, memdom_id, memdom, smv_id, smv);
-        mutex_unlock(&mm->smv_metadataMutex);
+        up_read(&mm->smv_metadataMutex);
         return -1;
     }
-    mutex_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
 
     mutex_lock(&smv->smv_mutex);
     set_bit(memdom_id, smv->memdom_bitmapJoin);
@@ -255,10 +253,10 @@ int smv_leave_memdom(int memdom_id, int smv_id, struct mm_struct *mm){
     }
 
     /* Get the actual memdom and smv struct from this mm */
-    mutex_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     memdom = mm->memdom_metadata[memdom_id];
     smv = mm->smv_metadata[smv_id];
-    mutex_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
     if( !memdom || !smv ) {
         printk(KERN_ERR "[%s] memdom %p || smv %p not found\n", __func__, memdom, smv);
         return -1;
@@ -294,9 +292,9 @@ int smv_is_in_memdom(int memdom_id, int smv_id){
         return 0;
     }
 
-    mutex_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
-    mutex_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
 
     if( !smv ) {
         printk(KERN_ERR "[%s] smv %p not found\n", __func__, smv);
@@ -323,9 +321,9 @@ int smv_exists(int smv_id){
 
     /* TODO: add privilege checks */
 
-    mutex_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
-    mutex_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
 
     if( !smv ) {
         printk(KERN_ERR "[%s] smv %p does not exist.\n", __func__, smv);
@@ -352,21 +350,20 @@ int register_smv_thread(int smv_id){
     }
 
     /* Tell the kernel we are about to run a new thread in a smv */
-    mutex_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     if( !test_bit(smv_id, mm->smv_bitmapInUse) ) {
         printk(KERN_ERR "[%s] smv %d not found\n", __func__, smv_id);
-        mutex_unlock(&mm->smv_metadataMutex);
+        up_read(&mm->smv_metadataMutex);
         return -1;
     }
+    up_read(&mm->smv_metadataMutex);
     mm->standby_smv_id = smv_id;  // Will be reset to MAIN_THREAD when do_fork exits.
-    mutex_unlock(&mm->smv_metadataMutex);
 
     /* Update number of tasks running in the smv */
     // TODO: Call atomic_dec when task exits the system
     mutex_lock(&mm->smv_metadata[smv_id]->smv_mutex);
     atomic_inc(&mm->smv_metadata[smv_id]->ntask);
     mutex_unlock(&mm->smv_metadata[smv_id]->smv_mutex);
-
     return 0;
 }
 EXPORT_SYMBOL(register_smv_thread);
@@ -412,7 +409,7 @@ pgd_t *smv_alloc_pgd(struct mm_struct *mm, int smv_id){
     /* Assign page table directory to mm_struct for smv_id */
     mm->pgd_smv[smv_id] = pgd;
 
-    slog(KERN_INFO, "[%s] smv %d pgd %p\n", __func__, smv_id, mm->pgd_smv[smv_id]);
+    printk(KERN_INFO "[%s] smv %d pgd %p\n", __func__, smv_id, mm->pgd_smv[smv_id]);
     return pgd;
 }
 
@@ -426,24 +423,23 @@ static inline void smv_mprotect_all_vmas(struct task_struct *tsk,
   struct smv_struct *smv = NULL;
   int next_memdom = 1; // TODO: mprotect for MAIN_THREAD memdom, too
   int i;
-  int err;
+  int err = 0;
   
   if (smv_id < 0 || smv_id > LAST_SMV_INDEX) {
     printk(KERN_ERR "[%s] Error, out of bound: smv %d\n", __func__, smv_id);
     return;
   }
-  
-  mutex_lock(&mm->smv_metadataMutex);
+
+  //down_read(&mm->smv_metadataMutex);
   smv = mm->smv_metadata[smv_id];
-  mutex_unlock(&mm->smv_metadataMutex);
+  //up_read(&mm->smv_metadataMutex);
   
   if (!smv) {
-    printk(KERN_ERR "[%s] smv %p does not exist.\n", __func__, smv);
+    printk(KERN_ERR "[%s] No smv found for smv ID %d.\n", __func__, smv_id);
     return;
   }
-  
-  mutex_lock(&smv->smv_mutex);
-  // mprotect for memdom 0, too
+
+  //mutex_lock(&smv->smv_mutex);
   for (i = 0; i < atomic_read(&mm->num_memdoms)-1; i++){
     next_memdom = find_next_bit(smv->memdom_bitmapJoin, SMV_ARRAY_SIZE, next_memdom);
     if (next_memdom > LAST_SMV_INDEX)
@@ -453,27 +449,28 @@ static inline void smv_mprotect_all_vmas(struct task_struct *tsk,
       break;
     next_memdom += 1; // increment for next iteration
   }
-  mutex_unlock(&smv->smv_mutex);
+  //mutex_unlock(&smv->smv_mutex);
+
+  if (!err)
+    slog(KERN_INFO, "[%s] Re-mprotected vmas for smv %d\n", __func__, smv_id);
   
-  //if (!err)
-    //slog(KERN_INFO, "[%s] Re-mprotected vmas for smv %d in %d memdoms\n", __func__, smv_id, mprotect_count);
 }
 
 /* Hook for security context switch from one smv to another (change secure memory view)
  */
-void switch_smv(struct task_struct *prev_tsk, struct task_struct *next_tsk,
-                   struct mm_struct *prev_mm, struct mm_struct *next_mm){
+void switch_smv(struct task_struct *next_tsk,
+		struct mm_struct *next_mm){
 
     /* Skip smv context switch if the next tasks is not in any smvs, 
      * or if next_mm is NULL */
-    if( (next_tsk && next_tsk->smv_id == -1) ||
+    if ((next_mm && !next_mm->using_smv) ||
+	(next_tsk && (next_tsk->smv_id == -1)) ||
          next_mm == NULL) {
         return;
     }
 
-    slog(KERN_INFO, "[%s] switching from smv %d (using smv? %d) to smv %d\n", __func__, prev_tsk->smv_id, prev_mm->using_smv, next_tsk->smv_id);
-    
-    smv_mprotect_all_vmas(next_tsk, next_mm, next_tsk->smv_id);
+    slog(KERN_INFO, "[%s] switching to smv %d\n", __func__, next_tsk->smv_id);
+    //smv_mprotect_all_vmas(next_tsk, next_mm, next_tsk->smv_id);
 }
 
 /* See implementation in memory.c */

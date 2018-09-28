@@ -584,7 +584,7 @@ void pyr_free_replacedby_kref(struct kref *kref)
  * when a task closes or when a profile is beign freed.
  */
 void pyr_free_profile_lib_policy(struct pyr_profile *profile) {
-  if (!profile)
+  if (!profile || !profile->ns)
     return;
 
   mutex_lock(&profile->ns->lock);

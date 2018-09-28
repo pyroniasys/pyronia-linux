@@ -75,7 +75,6 @@
 #include <linux/compiler.h>
 #include <linux/frame.h>
 #include <linux/prefetch.h>
-#include <linux/smv.h>
 
 #include <asm/switch_to.h>
 #include <asm/tlb.h>
@@ -2863,20 +2862,20 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	 */
 	arch_start_context_switch(prev);
 
-        /* Check if we need to context switch from one smv to another */
-	switch_smv(prev, next, oldmm, mm);
-
 	if (!mm) {
 		next->active_mm = oldmm;
 		atomic_inc(&oldmm->mm_count);
 		enter_lazy_tlb(oldmm, next);
-	} else
-		switch_mm_irqs_off(oldmm, mm, next);
+	}
+	else {
+	    switch_mm_irqs_off(oldmm, mm, next);
+	}
 
 	if (!prev->mm) {
 		prev->active_mm = NULL;
 		rq->prev_mm = oldmm;
 	}
+	
 	/*
 	 * Since the runqueue lock will be released by the next
 	 * task (which is an invalid locking op but in the case
@@ -2889,7 +2888,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	/* Here we just switch the register state and the stack. */
 	switch_to(prev, next, prev);
 	barrier();
-
+	
 	return finish_task_switch(prev);
 }
 

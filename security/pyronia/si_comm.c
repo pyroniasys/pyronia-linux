@@ -121,6 +121,8 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     callstack_req->runtime_responded = 0;    
     wait_event_interruptible(callstack_req_waitq, callstack_req->runtime_responded == 1);
 
+    printk("[%s] Received callstack from runtime\n", __func__);
+
     if (!callstack_req->cg_buf) {
       goto out;
     }
@@ -264,7 +266,7 @@ static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
     goto out;
   }
 
-  memcpy(callstack_req->cg_buf, mydata, MAX_RECV_LEN);
+  memcpy(callstack_req->cg_buf, mydata, strlen(mydata));
 
  out:
   send_to_runtime(info->snd_portid, SI_COMM_C_STACK_REQ, SI_COMM_A_USR_MSG, 0);
