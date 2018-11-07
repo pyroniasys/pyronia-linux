@@ -17,6 +17,13 @@
 #include "include/lib_policy.h"
 #include "include/policy.h"
 
+enum regex_type {
+	MATCH_FULL = 0,
+	MATCH_FRONT_ONLY,
+	MATCH_MIDDLE_ONLY,
+	MATCH_END_ONLY,
+};
+
 // Recursively free the ACL entries
 static void free_acl_entry(struct pyr_acl_entry **entry) {
     struct pyr_acl_entry *e = *entry;
@@ -121,6 +128,103 @@ static int pyr_add_acl_entry(struct pyr_acl_entry **acl,
     return -1;
 }
 
+/**
+ * parse_regex - parse a basic regex
+ * @buff:   the raw regex
+ * @len:    length of the regex
+ * @search: will point to the beginning of the string to compare
+ * @offset: the character at which the matching needs to be resumed
+ *
+ * This passes in a buffer containing a regex and this function will
+ * set search to point to the search part of the buffer and
+ * return the type of search it is (see enum above).
+ * This does modify buff.
+ *
+ * Returns enum type.
+ *  search returns the pointer to use for comparison.
+ *  not returns 1 if buff started with a '!'
+ *     0 otherwise.
+ */
+static enum regex_type parse_regex(char *buf, int len, int *search, char **offset) {
+	int type = MATCH_FULL;
+	int i;
+	*offset = NULL;
+	*search = 0;
+	
+	for (i = 0; i < len; i++) {
+	  if (buf[i] == '*') {
+	    if (!i) {
+	      type = MATCH_END_ONLY;
+	      i++;
+	      while(buf[i] == '*') {
+		i++;
+	      }
+	      *offset = buf+i;
+	    }
+	    else {
+	      type = MATCH_FRONT_ONLY;
+	      *search = i;
+	      i++;
+	      while(buf[i] == '*') {
+		i++;
+	      }
+	      // this is the other half of the string we need to match
+	      *offset = buf+i;
+	      break;
+	    }
+	  }
+	}
+
+	return type;
+}
+
+static int name_regex_match(char *acl_name, const char *to_match) {
+  int matched = 0;
+  int search = 0;
+  int type = 0;
+  char *offset = NULL;
+  int cmp_len = 0;
+
+  if (!acl_name)
+    return 0;
+
+  if (!to_match)
+    return 0;
+  
+  type = parse_regex(acl_name, strlen(acl_name), &search,
+		     &offset);
+  
+  switch (type) {
+  case MATCH_FULL:
+    if (strncmp(to_match, acl_name, strlen(to_match)) == 0)
+      matched = 1;
+    break;
+  case MATCH_FRONT_ONLY:
+    if (strncmp(to_match, acl_name, search) == 0) {
+      if (offset == NULL)
+	matched = 1;
+      else {
+	cmp_len = strlen(to_match);
+	if (strncmp(to_match + (cmp_len-strlen(offset)), offset, strlen(offset)) == 0) {
+	  matched = 1;
+	}
+      }
+    }
+    break;
+  case MATCH_END_ONLY:
+    cmp_len = strlen(to_match);
+    if (offset && cmp_len >= strlen(offset) &&
+	memcmp(to_match + (cmp_len - strlen(offset)), offset, strlen(offset)) == 0)
+      matched = 1;
+    break;
+  }
+
+  if (matched)
+    PYR_DEBUG("[%s] Match ACL entry %s with name %s (match type %d)\n", __func__, acl_name, to_match, type);
+
+  return matched;
+}
+
 // Finds the ACL entry for `name` in the given linked list `start`.
 // Returns null if no entry for `name` exists.
 static struct pyr_acl_entry *pyr_find_acl_entry(struct pyr_acl_entry *start,                                                 const char *name) {
@@ -133,12 +237,12 @@ static struct pyr_acl_entry *pyr_find_acl_entry(struct pyr_acl_entry *start,    
         // on each before we determine if we've found the requested ACL entry
         switch (runner->entry_type) {
         case(resource_entry):
-            if (!strncmp(runner->target.fs_resource.name, name, strlen(runner->target.fs_resource.name))) {
+	  if (name_regex_match(runner->target.fs_resource.name, name)) {
                 return runner;
             }
             break;
         case(net_entry):
-            if (!strncmp(runner->target.net_dest.name, name, strlen(runner->target.net_dest.name))) {
+	  if (name_regex_match(runner->target.net_dest.name, name)) {
                 return runner;
             }
             break;
@@ -404,6 +508,8 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
         goto fail;
     }
 
+    printk(KERN_ERR "[%s] Num of rules %d\n", __func__, num_rules);
+    
     next_rule = strsep(&lp_str, LIB_RULE_STR_DELIM);
     while(next_rule && count < num_rules) {
         next_lib = strsep(&next_rule, RESOURCE_STR_DELIM);

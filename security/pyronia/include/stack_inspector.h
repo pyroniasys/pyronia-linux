@@ -16,7 +16,7 @@
 
 #include "lib_policy.h"
 
-#define MAX_RECV_LEN 1024
+#define MAX_RECV_LEN 2048
 
 struct pyr_callstack_request {
   u32 port_id;
