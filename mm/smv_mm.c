@@ -36,7 +36,7 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
     /* Get this smv's privileges */
     privs = memdom_priv_get(memdom_id, smv_id);
 
-    printk(KERN_INFO "[%s] error code: %lu\n", __func__, error_code);
+    slog(KERN_INFO "[%s] error code: %lu\n", __func__, error_code);
 
     /* Protection fault */
     if ( error_code & PF_PROT ) {
@@ -256,9 +256,9 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
      * pgtables for destination  */
     set_pte_at(mm, address, dst_pte, *src_pte);
 
-    printk(KERN_INFO "[%s] src smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n",
+    slog(KERN_INFO "[%s] src smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n",
                 __func__, src_smv, pgd_val(*src_pgd), pud_val(*src_pud), pmd_val(*src_pmd), pte_val(*src_pte));
-    printk(KERN_INFO "[%s] dst smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n",
+    slog(KERN_INFO "[%s] dst smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n",
                 __func__, dst_smv, pgd_val(*dst_pgd), pud_val(*dst_pud), pmd_val(*dst_pmd), pte_val(*dst_pte));
 
     spin_unlock(dst_ptl);

@@ -29,7 +29,7 @@
 #include <linux/types.h>
 #include <linux/smv_mm.h>
 
-#define SMV_LOGGING
+//#define SMV_LOGGING
 #ifdef SMV_LOGGING
 #define slog(level, fmt, args...) printk(level fmt, ##args)
 #else
