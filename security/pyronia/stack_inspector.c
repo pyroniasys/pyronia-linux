@@ -78,14 +78,14 @@ void pyr_inspect_callstack(u32 port_id, struct pyr_lib_policy_db *lib_perm_db,
   callgraph = pyr_stack_request(port_id);
   mutex_unlock(&req->req_mutex);
   if (!callgraph) {
-    PYR_ERROR("[%s] Could not get callstack from runtime for library %s for runtime %d\n", __func__, name, port_id);
+    PYR_ERROR("[%s] Could not get callstack from runtime for resource %s for runtime %d\n", __func__, name, port_id);
     goto out;
   }
 
   // compute the effective permissions given the callstack and
   // recorded library permissions
   if (pyr_compute_lib_perms(lib_perm_db, callgraph, name, &perms)) {
-    PYR_ERROR("[%s] Error inspecting stack for library %s for runtime %d\n", __func__, name, port_id);
+    PYR_ERROR("[%s] Error inspecting stack for resource %s for runtime %d\n", __func__, name, port_id);
   }
 
  out:

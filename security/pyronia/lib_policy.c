@@ -524,7 +524,7 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
         if(!strncmp(next_rule, "network ", 8)) {
             next_type = net_entry;
             next_rule = next_rule+8;
-            next_perms = OP_CONNECT;
+            next_perms = OP_CONNECT | OP_BIND; // FIXME: policy should specify
         }
         else {
             next_type = resource_entry;

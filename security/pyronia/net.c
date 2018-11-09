@@ -171,8 +171,9 @@ int pyr_revalidate_sk(int op, struct sock *sk)
 
 static void in_addr_to_str(struct sockaddr *sa, const char**addr_str)
 {
-    int in_addr = 0, printed_bytes = 0;
+  int in_addr = 0, printed_bytes = 0;
     char ip_str[INET_ADDRSTRLEN+1];
+    char ip6_str[INET6_ADDRSTRLEN+1];
 
     // TODO: we might get a junk address, so fail gracefully
     
@@ -193,10 +194,28 @@ static void in_addr_to_str(struct sockaddr *sa, const char**addr_str)
 
         *addr_str = ip_str;
     }
+    else if (sa->sa_family == AF_INET6) {
+        // Support IPv6 addresses
+	unsigned char *s6_addrp = ((struct sockaddr_in6*)sa)->sin6_addr.s6_addr; 
+	memset(ip6_str, 0, INET6_ADDRSTRLEN+1);
+	printed_bytes = snprintf(ip6_str, INET6_ADDRSTRLEN, "%x:%x:%x:%x:%x:%x:%x:%x",
+				 (s6_addrp[0] | s6_addrp[1]),
+				 (s6_addrp[2] | s6_addrp[3]),
+				 (s6_addrp[4] | s6_addrp[5]),
+				 (s6_addrp[6] | s6_addrp[7]),
+				 (s6_addrp[8] | s6_addrp[9]),
+				 (s6_addrp[10] | s6_addrp[11]),
+				 (s6_addrp[12] | s6_addrp[13]),
+				 (s6_addrp[14] | s6_addrp[15]));
+        if (printed_bytes > sizeof(ip6_str)) {
+            *addr_str = NULL;
+            return;
+        }
+
+        *addr_str = ip6_str;
+    }
     else {
-        // FIXME: Actually support IPv6 addresses
-        //in_addr = (int)((struct sockaddr_in6*)sa)->sin6_addr.s6_addr32[0];
-        *addr_str = "IPv6 address";
+      *addr_str  = "unknown";
     }
 }
 

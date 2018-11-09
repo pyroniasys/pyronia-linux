@@ -111,6 +111,8 @@ int pyr_deserialize_callstack(pyr_cg_node_t **root, char *cs_str) {
     char *next_lib, *num_str;
     u32 num_nodes = 0, count = 0;
 
+    printk(KERN_INFO "[%s] Callstack: %s\n", __func__, cs_str);
+    
     // first token in the string is the number of callstack
     // layers to expect
     num_str = strsep(&cs_str, CALLSTACK_STR_DELIM);
