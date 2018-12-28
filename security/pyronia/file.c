@@ -357,6 +357,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             if (request & ~lib_perms) {
                 PYR_ERROR("File - Expected %d, got %d; file: %s\n",
                           lib_perms, request, name);
+		perms.allow = lib_perms; // pyr_audit_file below recalculates error
                 error = -EACCES;
             }
             else
