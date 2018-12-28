@@ -3560,7 +3560,7 @@ static int handle_pte_fault(struct fault_env *fe)
 	if (!fe->pte) {
             if (vma_is_anonymous(fe->vma)) {
                 if (fe->vma->vm_mm->using_smv) {
-                    slog(KERN_INFO "[%s] addr 0x%16lx !fe->pte, calling do_anonymous_page\n", __func__, fe->address);
+		  slog(KERN_INFO, "[%s] addr 0x%16lx !fe->pte, calling do_anonymous_page\n", __func__, fe->address);
                 }
                 return do_anonymous_page(fe);
             }
