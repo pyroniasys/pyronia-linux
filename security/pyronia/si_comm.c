@@ -266,6 +266,7 @@ static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
     goto out;
   }
 
+  memset(callstack_req->cg_buf, 0, MAX_RECV_LEN);
   memcpy(callstack_req->cg_buf, mydata, strlen(mydata));
 
  out:
