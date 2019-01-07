@@ -26,6 +26,7 @@
 
 #define SMV_ARRAY_SIZE 1025 /* Maximum number of smvs and memdoms allowed in a process */
 #define MAIN_THREAD 0 /* Main thread is always using the first index in the metadata array: 0 */
+#define PYR_THREAD 1
 #define LAST_SMV_INDEX (SMV_ARRAY_SIZE - 1)
 #define LAST_MEMDOM_INDEX (SMV_ARRAY_SIZE - 1)
 

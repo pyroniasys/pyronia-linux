@@ -242,8 +242,10 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
         return -1;
     }
 
-    /* Only main thread can change the privileges to a memory domain. */
-    if (current->smv_id != MAIN_THREAD) {
+    /* Only main thread or pyronia SMV thread
+       can change the privileges to a memory domain. */
+    if (current->smv_id != MAIN_THREAD &&
+	current->smv_id != PYR_THREAD) {
       printk(KERN_ERR "[%s] thread running in smv %d is not allowed to add privileges.\n", __func__, current->smv_id);
       return -1;
     }
@@ -313,8 +315,10 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
         return -1;
     }
 
-    /* Only main thread can change the privileges to a memory domain. */
-    if (current->smv_id != MAIN_THREAD) {
+    /* Only main thread and pyronia thread
+       can change the privileges to a memory domain. */
+    if (current->smv_id != MAIN_THREAD &&
+	current->smv_id != PYR_THREAD) {
       printk(KERN_ERR "[%s] thread running in smv %d is not allowed to revoke privileges.\n", __func__, current->smv_id);
       return -1;	
     }
