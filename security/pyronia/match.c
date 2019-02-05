@@ -144,7 +144,7 @@ static int verify_dfa(struct pyr_dfa *dfa, int flags)
 			if (DEFAULT_TABLE(dfa)[i] >= state_count)
 				goto out;
 			if (base_idx(BASE_TABLE(dfa)[i]) + 255 >= trans_count) {
-				printk(KERN_ERR "Pyronia DFA next/check upper "
+			  PYR_ERROR("Pyronia DFA next/check upper "
 				       "bounds error\n");
 				goto out;
 			}

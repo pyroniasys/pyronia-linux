@@ -82,6 +82,8 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
 
     // finalize the message
     genlmsg_end(skb, msg_head);
+
+    PYR_DEBUG("[%s] Sending message to runtime at pid %d\n", __func__, port_id);
     
     // send the message
     ret = genlmsg_unicast(&init_net, skb, port_id);
@@ -121,7 +123,7 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     callstack_req->runtime_responded = 0;    
     wait_event_interruptible(callstack_req_waitq, callstack_req->runtime_responded == 1);
 
-    printk("[%s] Received callstack from runtime\n", __func__);
+    PYR_DEBUG("[%s] Received callstack from runtime\n", __func__);
 
     if (!callstack_req->cg_buf) {
       goto out;
@@ -133,6 +135,7 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     }
 
  out:
+    memset(callstack_req->cg_buf, 0, MAX_RECV_LEN);
     callstack_req->runtime_responded = 0;
     return cg;
 }
@@ -169,13 +172,13 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     if (na) {
         msg = (char *)nla_data(na);
         if (msg == NULL)
-            printk(KERN_ERR "[%s] error while receiving data\n", __func__);
+	  PYR_ERROR("[%s] error while receiving data\n", __func__);
     }
     else
         printk(KERN_CRIT "no info->attrs %i\n", SI_COMM_A_USR_MSG);
 
     /* Parse the received message here */
-    printk(KERN_INFO "[%s] Received registration message: %s\n", __func__, msg);
+    PYR_DEBUG("[%s] Received registration message: %s\n", __func__, msg);
     
     // the first token in our message should contain the
     // SI port for the sender application
@@ -223,7 +226,7 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
       pyr_get_profile(profile);
     }
 
-    printk(KERN_INFO "[%s] userspace at port %d registered SI port ID: %d\n", __func__, info->snd_portid, snd_port);
+    PYR_DEBUG("[%s] userspace at port %d registered SI port ID: %d\n", __func__, info->snd_portid, snd_port);
 
  out:
     /* This serves as an ACK from the kernel */
@@ -231,7 +234,7 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
                           SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG,
                           !valid_pid);
     if (err)
-      printk(KERN_ERR "[%s] Error responding to runtime: %d\n", __func__, err);
+      PYR_ERROR("[%s] Error responding to runtime: %d\n", __func__, err);
 
     return 0;
 }
@@ -316,21 +319,21 @@ static int __init pyr_kernel_comm_init(void)
     /*register new family*/
     rc = genl_register_family_with_ops(&si_comm_gnl_family, si_comm_gnl_ops);
     if (rc != 0){
-      printk(KERN_ERR "[%s] register ops: %i\n",__func__, rc);
+      PYR_DEBUG("[%s] register ops: %i\n",__func__, rc);
       goto fail;
     }
 
     if(pyr_callstack_request_alloc(&callstack_req)) {
-      printk(KERN_ERR "[%s] Could not allocate new stack request object\n", __func__);
+      PYR_ERROR("[%s] Could not allocate new stack request object\n", __func__);
       goto fail;
     }
 
-    printk(KERN_INFO "[%s] Initialized SI communication channel\n", __func__);
+    PYR_DEBUG("[%s] Initialized SI communication channel\n", __func__);
     return 0;
 
 fail:
     genl_unregister_family(&si_comm_gnl_family);
-    printk(KERN_CRIT "[%s] Error occured while creating SI netlink channel\n", __func__);
+    PYR_ERROR("[%s] Error occured while creating SI netlink channel\n", __func__);
     return -1;
 }
 
@@ -341,12 +344,12 @@ static void __exit pyr_kernel_comm_exit(void)
     /*unregister the family*/
     ret = genl_unregister_family(&si_comm_gnl_family);
     if(ret !=0){
-      printk(KERN_ERR "[%s] unregister family %i\n", __func__, ret);
+      PYR_DEBUG("[%s] unregister family %i\n", __func__, ret);
     }
 
     pyr_callstack_request_free(&callstack_req);
 
-    printk(KERN_INFO "[%s] SI channel teardown complete\n", __func__);
+    PYR_DEBUG("[%s] SI channel teardown complete\n", __func__);
 }
 
 

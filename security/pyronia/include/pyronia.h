@@ -22,7 +22,7 @@
 #include "match.h"
 
 // msm: comment this out if we're not testing
-#define PYR_TESTING 1
+#define PYR_TESTING 0
 
 /*
  * Class of mediation types in the AppArmor policy db

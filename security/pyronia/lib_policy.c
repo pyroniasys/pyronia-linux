@@ -193,10 +193,13 @@ static int name_regex_match(char *acl_name, const char *to_match) {
   
   type = parse_regex(acl_name, strlen(acl_name), &search,
 		     &offset);
+
+  size_t acl_name_len = strlen(acl_name);
+  size_t to_match_len = strlen(to_match);
   
   switch (type) {
   case MATCH_FULL:
-    if (strncmp(to_match, acl_name, strlen(to_match)) == 0)
+    if (strncmp(to_match, acl_name, (acl_name_len >= to_match_len ? acl_name_len : to_match_len)) == 0)
       matched = 1;
     break;
   case MATCH_FRONT_ONLY:
@@ -268,7 +271,8 @@ static struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *pol
 
     while (runner != NULL) {
         if (!strncmp(runner->lib, lib, strlen(runner->lib))) {
-            return runner;
+	  PYR_DEBUG("[%s] Found policy for library %s\n", __func__, runner->lib);
+	  return runner;
         }
         runner = runner->next;
     }
@@ -508,7 +512,7 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
         goto fail;
     }
 
-    printk(KERN_ERR "[%s] Num of rules %d\n", __func__, num_rules);
+    PYR_DEBUG("[%s] Num of rules %d\n", __func__, num_rules);
     
     next_rule = strsep(&lp_str, LIB_RULE_STR_DELIM);
     while(next_rule && count < num_rules) {

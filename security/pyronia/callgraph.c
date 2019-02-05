@@ -50,7 +50,7 @@ int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
     int err = 0;
     u32 eff_perm = 0;
 
-    printk(KERN_INFO "[%s] Computing permissions for %s... \n", __func__, name);
+    PYR_DEBUG("[%s] Computing permissions for %s... \n", __func__, name);
 
     eff_perm = pyr_get_lib_perms(lib_policy_db, cur_node->lib, name);
 
@@ -111,7 +111,7 @@ int pyr_deserialize_callstack(pyr_cg_node_t **root, char *cs_str) {
     char *next_lib, *num_str;
     u32 num_nodes = 0, count = 0;
 
-    printk(KERN_INFO "[%s] Callstack: %s\n", __func__, cs_str);
+    PYR_DEBUG("[%s] Callstack: %s\n", __func__, cs_str);
     
     // first token in the string is the number of callstack
     // layers to expect

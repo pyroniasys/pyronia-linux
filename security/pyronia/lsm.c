@@ -640,8 +640,11 @@ static void pyronia_task_free(struct task_struct *task) {
   if (!profile) {
     return;
   }
-  
-  pyr_free_profile_lib_policy(profile);
+
+  // only teardown the library-level policy
+  // if the main thread is exiting
+  if (task->smv_id == 0)
+    pyr_free_profile_lib_policy(profile);
 }
 
 static int pyronia_task_setrlimit(struct task_struct *task,
