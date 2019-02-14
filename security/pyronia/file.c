@@ -344,7 +344,8 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
                           name, profile->base.name);
             }
             else {
-                PYR_DEBUG("[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, profile->port_id);
+	      //PYR_DEBUG("[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, profile->port_id);
+	      printk(KERN_INFO "[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, profile->port_id);
 
                 // the requested resource is not in our defaults list,
                 // so ask for the callstack
@@ -355,13 +356,13 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             // this checks if the requested permissions are an exact match
             // to the effective library permissions
             if (request & ~lib_perms) {
-                PYR_ERROR("File - Expected %d, got %d; file: %s\n",
+                PYR_DEBUG("File - Expected %d, got %d; file: %s\n",
                           lib_perms, request, name);
 		perms.allow = lib_perms; // pyr_audit_file below recalculates error
                 error = -EACCES;
             }
             else
-                PYR_ERROR("File - Operation allowed for %s\n", name);
+                PYR_DEBUG("File - Operation allowed for %s\n", name);
         }
 
  audit:

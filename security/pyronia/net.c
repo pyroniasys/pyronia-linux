@@ -286,7 +286,8 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                               __func__, addr, profile->base.name);
                 }
                 else {
-                    PYR_DEBUG("[%s] Requesting callstack for addr %s from runtime %d\n", __func__, addr, profile->port_id);
+		  //PYR_DEBUG("[%s] Requesting callstack for addr %s from runtime %d\n", __func__, addr, profile->port_id);
+		  printk(KERN_INFO "[%s] Requesting callstack for addr %s from runtime %d\n", __func__, addr, profile->port_id);
 
                     // the requested address is not in our defaults list,
                     // so ask for the callstack
@@ -298,12 +299,12 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                 // this checks if the requested operation is an
                 // exact match to the effective library operation
                 if (op & ~lib_op) {
-                    PYR_ERROR("Net - Expected %d, got %d; addr: %s\n",  \
+                    PYR_DEBUG("Net - Expected %d, got %d; addr: %s\n",  \
                               lib_op, op, addr);
                     error = -EACCES;
                 }
                 else {
-                    PYR_ERROR("Net - Operation allowed for %s\n", addr);
+                    PYR_DEBUG("Net - Operation allowed for %s\n", addr);
                 }
             }
         }
