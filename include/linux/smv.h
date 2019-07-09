@@ -57,7 +57,7 @@ void switch_smv(struct task_struct *next_tsk, struct mm_struct *next_mm);
 void smv_free_mmap(struct mm_struct *mm, int smv_id);
 
 /// --- Functions exported to user space to manage metadata --- ///
-int smv_main_init(void);
+int smv_main_init(int is_child);
 int smv_create(void);
 int smv_kill(int smv_id, struct mm_struct *mm);
 void free_all_smvs(struct mm_struct *mm);

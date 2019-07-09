@@ -340,16 +340,16 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
                 // gathered from the loaded profile
                 lib_perms = pyr_get_default_perms(profile->lib_perm_db,
                                                   name);
-                PYR_DEBUG("[%s] %s is default in profile %s\n", __func__,
+                printk(KERN_INFO "[%s] %s is default in profile %s\n", __func__,
                           name, profile->base.name);
             }
             else {
 	      //PYR_DEBUG("[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, profile->port_id);
-	      printk(KERN_INFO "[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, profile->port_id);
+	      printk(KERN_INFO "[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, current->pid);
 
                 // the requested resource is not in our defaults list,
                 // so ask for the callstack
-                pyr_inspect_callstack(profile->port_id, profile->lib_perm_db,
+                pyr_inspect_callstack(current->pid, profile->lib_perm_db,
                                       name, &lib_perms);
             }
 

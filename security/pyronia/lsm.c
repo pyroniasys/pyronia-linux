@@ -643,7 +643,7 @@ static void pyronia_task_free(struct task_struct *task) {
 
   // only teardown the library-level policy
   // if the main thread is exiting
-  if (task->smv_id == 0)
+  if (task->pid == profile->main_pid && task->smv_id == 0)
     pyr_free_profile_lib_policy(profile);
 }
 

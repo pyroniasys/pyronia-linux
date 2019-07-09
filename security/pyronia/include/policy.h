@@ -228,7 +228,7 @@ struct pyr_profile {
 	struct pyr_net net;
 	struct pyr_rlimit rlimits;
         struct pyr_lib_policy_db *lib_perm_db;
-        u32 port_id;
+        int main_pid;
         int using_pyronia;
 
 	unsigned char *hash;

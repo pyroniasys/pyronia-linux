@@ -133,6 +133,7 @@ int parse_message(char* message){
     int smv_op = -1;         /* 0: create, 1: kill, 2: run, 3: domain related, -1: undefined */
     int smv_domain_op = -1;    /* 0: join, 1: leave, 2: isin, 3: switch, -1: undefined */
     long smv_id = -1;
+    int is_child = -1;
 
     int i = 0;
 
@@ -242,12 +243,20 @@ int parse_message(char* message){
         }
 
         // smv: get smv id
-        else if( message_type == 1 && (smv_op >= 1 || smv_op <= 6) && smv_id == -1){
-            slog(KERN_CRIT, "memdom token 3 (smv_id): %s\n", token);
+        else if( message_type == 1) {
+	  if ((smv_op >= 1 && smv_op <= 6) && smv_id == -1){
+            slog(KERN_CRIT, "smv token 3 (smv_id): %s\n", token);
             if( kstrtol(token, 10, &smv_id) ){
                 return -1;
             }
-            continue;
+	  }
+	  else if (smv_op == 9 && is_child == -1) {
+	    slog(KERN_CRIT, "smv token 3 (is_child): %s\n", token);
+            if( kstrtol(token, 10, &is_child) ){
+                return -1;
+            }
+	  }
+	  continue;
         }
 
         /* token 4*/
@@ -368,7 +377,7 @@ int parse_message(char* message){
             return smv_get_smv_id();
         }
         else if (smv_op == 9) {
-            smv_main_init();
+            smv_main_init(is_child);
             return 0;
         }
         else if (smv_op == 7) {

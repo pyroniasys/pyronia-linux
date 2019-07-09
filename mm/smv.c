@@ -20,7 +20,7 @@ static struct kmem_cache *smv_cachep;
 /// ---------------------- Functions exported to user space to manage metadata ------------------  ///
 /// ---------------------------------------------------------------------------------------------  ///
 /* Telling the kernel that this process will be using the secure memory view model */
-int smv_main_init(void){
+int smv_main_init(int is_child){
     struct mm_struct *mm = current->mm;
     int smv_id = -1;
     int memdom_id = -1;
@@ -56,7 +56,10 @@ int smv_main_init(void){
     current->mmap_memdom_id = MAIN_THREAD;  // main thread is using MAIN_THREAD-th (0) as mmap_id
     
     /* make all existing vma in memdom_id: MAIN_THREAD */
-    memdom_claim_all_vmas(MAIN_THREAD);
+    // only do this for the parent process, want
+    // child pyronia procs to retain the same memdom allocations
+    if (!is_child)
+      memdom_claim_all_vmas(MAIN_THREAD);
     
     up_write(&mm->smv_metadataMutex);
 

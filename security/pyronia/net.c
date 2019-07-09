@@ -282,16 +282,16 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                 if (pyr_is_default_lib_policy(profile->lib_perm_db, addr)) {
                     lib_op = pyr_get_default_perms(profile->lib_perm_db,
                                                       addr);
-                    PYR_DEBUG("[%s] %s is default in profile %s\n",
+                    printk(KERN_INFO "[%s] %s is default in profile %s\n",
                               __func__, addr, profile->base.name);
                 }
                 else {
 		  //PYR_DEBUG("[%s] Requesting callstack for addr %s from runtime %d\n", __func__, addr, profile->port_id);
-		  printk(KERN_INFO "[%s] Requesting callstack for addr %s from runtime %d\n", __func__, addr, profile->port_id);
+		  printk(KERN_INFO "[%s] Requesting callstack for addr %s from runtime %d\n", __func__, addr, current->pid);
 
                     // the requested address is not in our defaults list,
-                    // so ask for the callstack
-                    pyr_inspect_callstack(profile->port_id,
+                    // so ask for the callstack.
+                    pyr_inspect_callstack(current->pid,
                                           profile->lib_perm_db, addr,
                                           &lib_op);
                 }
