@@ -232,6 +232,7 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
         int error = 0;
         unsigned short sock_family = 0;
         u32 lib_op = 0;
+        struct pyr_acl_entry *acl = NULL;
         const char *addr = NULL;
 
         /* pyr_revalidate_sk should not be called from interrupt context
@@ -279,9 +280,8 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                 }
 
                 // check if we have a default policy for this address
-                if (pyr_is_default_lib_policy(profile->lib_perm_db, addr)) {
-                    lib_op = pyr_get_default_perms(profile->lib_perm_db,
-                                                      addr);
+                if (pyr_is_default_lib_policy(profile->lib_perm_db, addr, &acl)) {
+                    lib_op = pyr_get_perms_from_acl(acl, addr);
                     printk(KERN_INFO "[%s] %s is default in profile %s\n",
                               __func__, addr, profile->base.name);
                 }

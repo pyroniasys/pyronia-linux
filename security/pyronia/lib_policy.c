@@ -283,7 +283,7 @@ static struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *pol
 
 // Returns the allowed permissions or operations associated
 // with the given ACL entry
-static u32 pyr_get_perms_from_acl(struct pyr_acl_entry *acl) {
+u32 pyr_get_perms_from_acl(struct pyr_acl_entry *acl) {
     switch (acl->entry_type) {
         case(resource_entry):
             return acl->target.fs_resource.perms;
@@ -423,40 +423,22 @@ u32 pyr_get_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
     return pyr_get_perms_from_acl(acl);
 }
 
-// Gets the permissions for the given default resource from the policy DB
-u32 pyr_get_default_perms(struct pyr_lib_policy_db *lib_policy_db,
-                          const char *name) {
-    struct pyr_acl_entry *acl;
-
-    if (!lib_policy_db)
-      return 0;
-    
-    acl = pyr_find_acl_entry(lib_policy_db->defaults, name);
-
-    // we don't have an entry in our ACL for this `name`,
-    // so the library doesn't have any permissions to access `name`.
-    // default-deny policy
-    if (acl == NULL) {
-        return 0;
-    }
-
-    return pyr_get_perms_from_acl(acl);
-}
-
 int pyr_is_default_lib_policy(struct pyr_lib_policy_db *lib_policy_db,
-                           const char *name) {
-    struct pyr_acl_entry *acl;
+                              const char *name,
+                              struct pyr_acl_entry **found) {
+    struct pyr_acl_entry *acl = NULL;
+    int is_def = 0;
 
     acl = pyr_find_acl_entry(lib_policy_db->defaults, name);
 
     // we don't have an entry in our ACL for this `name`,
-    // so the library doesn't have any permissions to access `name`.
-    // default-deny policy
-    if (acl == NULL) {
-        return 0;
+    // so check the lib policy DB
+    if (acl != NULL) {
+        is_def = 1;
     }
 
-    return 1;
+    *found = acl;
+    return is_def;
 }
 
 // Allocates a new policy DB

@@ -113,11 +113,11 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db *, const char *,
                        enum acl_entry_type, const char *, u32);
 int pyr_add_default(struct pyr_lib_policy_db *, enum acl_entry_type,
                     const char *, u32);
-u32 pyr_get_lib_perms(struct pyr_lib_policy_db *, const char *,
-		      const char *);
-u32 pyr_get_default_perms(struct pyr_lib_policy_db *, const char *);
+u32 pyr_get_perms_from_acl(struct pyr_acl_entry *acl);
+u32 pyr_get_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
+                      const char *lib, const char *name);
 int pyr_is_default_lib_policy(struct pyr_lib_policy_db *,
-                              const char *);
+                              const char *, struct pyr_acl_entry **);
 int pyr_new_lib_policy_db(struct pyr_lib_policy_db **);
 void pyr_free_lib_policy_db(struct pyr_lib_policy_db **);
 
