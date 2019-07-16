@@ -83,7 +83,7 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
     // finalize the message
     genlmsg_end(skb, msg_head);
 
-    PYR_DEBUG("[%s] Sending message to runtime at pid %d\n", __func__, port_id);
+    printk(KERN_CRIT "[%s] Sending message to runtime at pid %d\n", __func__, port_id);
     
     // send the message
     ret = genlmsg_unicast(&init_net, skb, port_id);
@@ -123,7 +123,7 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     callstack_req->runtime_responded = 0;    
     wait_event_interruptible(callstack_req_waitq, callstack_req->runtime_responded == 1);
 
-    PYR_DEBUG("[%s] Received callstack from runtime\n", __func__);
+    printk(KERN_CRIT "[%s] Received callstack from runtime\n", __func__);
 
     if (!callstack_req->cg_buf) {
       goto out;

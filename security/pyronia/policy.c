@@ -591,7 +591,7 @@ void pyr_free_profile_lib_policy(struct pyr_profile *profile) {
   if (profile->using_pyronia) {
     PYR_DEBUG("[%s] Pyronia cleanup\n", __func__);
     profile->using_pyronia = 0;
-    profile->port_id = 0;
+    profile->main_pid = -1;
     pyr_free_lib_policy_db(&profile->lib_perm_db);
   }
   mutex_unlock(&profile->ns->lock);
@@ -705,7 +705,7 @@ struct pyr_profile *pyr_alloc_profile(const char *hname)
 	if (!policy_init(&profile->base, NULL, hname))
 		goto fail;
 
-	profile->port_id = 0;
+	profile->main_pid = -1;
 	profile->using_pyronia = 0;
 	
 	if (pyr_new_lib_policy_db(&profile->lib_perm_db))

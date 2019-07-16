@@ -104,7 +104,7 @@ int smv_internal_function_dispatcher(int smv_op, long smv_id, int smv_domain_op,
         slog(KERN_CRIT, "[%s] smv_run(%ld)\n", __func__, smv_id);
     }else if(smv_op == 3){
         if(smv_domain_op == 0){
-	    slog(KERN_CRIT, "[%s] smv_join_domain(%ld, %ld)\n", __func__, memdom_id1, smv_id);
+	  slog(KERN_CRIT, "[%s] smv_join_domain(%ld, %ld)\n", __func__, memdom_id1, smv_id);
             rc = smv_join_memdom(memdom_id1, smv_id);
         }else if(smv_domain_op == 1){
 	    slog(KERN_CRIT, "[%s] smv_leave_domain(%ld, %ld)\n", __func__, smv_id, memdom_id1);
@@ -153,8 +153,10 @@ int parse_message(char* message){
         if(message_type == -1){
             if( (strcmp(token, "memdom")) == 0)
                 message_type = 0;
-            else if( (strcmp(token, "smv")) == 0)
+            else if( (strcmp(token, "smv")) == 0) {
                 message_type = 1;
+		slog(KERN_CRIT, "message type smv\n");
+	    }
             else if( (strcmp(token, "gdb_breakpoint")) == 0){
                 message_type = 9;
                 break;
@@ -166,7 +168,7 @@ int parse_message(char* message){
         /* token 2 */
         // decide operation
         if( message_type == 0 && memdom_op == -1){  // memdom
-            slog(KERN_CRIT, "memdom token 2 (op): %s\n", token);
+	  slog(KERN_CRIT, "memdom token 2 (op): %s\n", token);
 
             if( (strcmp(token, "create")) == 0 )
                 memdom_op = 0;
@@ -194,7 +196,7 @@ int parse_message(char* message){
             continue;
         }
         else if( message_type == 1 && smv_op == -1){ // smv
-            slog(KERN_CRIT, "smv token 2 (op): %s\n", token);
+	    slog(KERN_CRIT, "smv token 2 (op): %s\n", token);
             if( (strcmp(token, "create")) == 0 )
                 smv_op = 0;
             else if( (strcmp(token, "kill")) == 0 )
@@ -243,19 +245,18 @@ int parse_message(char* message){
         }
 
         // smv: get smv id
-        else if( message_type == 1) {
-	  if ((smv_op >= 1 && smv_op <= 6) && smv_id == -1){
-            slog(KERN_CRIT, "smv token 3 (smv_id): %s\n", token);
-            if( kstrtol(token, 10, &smv_id) ){
-                return -1;
-            }
+        else if (message_type == 1 && (smv_op >= 1 && smv_op <= 6) && smv_id == -1) {
+	  slog(KERN_CRIT, "smv token 3 (smv_id): %s\n", token);
+	  if( kstrtol(token, 10, &smv_id) ){
+	    return -1;
 	  }
-	  else if (smv_op == 9 && is_child == -1) {
-	    slog(KERN_CRIT, "smv token 3 (is_child): %s\n", token);
-            if( kstrtol(token, 10, &is_child) ){
-                return -1;
-            }
+	  continue;
+	}
+	else if (message_type == 1 && smv_op == 9 && is_child == -1) {
+	  if( kstrtoint(token, 10, &is_child) ){
+	    return -1;
 	  }
+	  slog(KERN_CRIT, "smv token 3 (is_child): %d\n", is_child);
 	  continue;
         }
 
@@ -283,6 +284,7 @@ int parse_message(char* message){
         }
         // smv gets memory domain op
         else if( message_type == 1 && smv_op == 3 && smv_domain_op == -1){
+	    slog(KERN_CRIT, "smv token 4 (smv_domain_op): %s\n", token);
             if( (strcmp(token, "join")) == 0)
                 smv_domain_op = 0;
             else if( (strcmp(token, "leave")) == 0)
@@ -332,7 +334,7 @@ int parse_message(char* message){
         }
             // smv gets memory domain id
         else if(message_type == 1 && smv_op == 3 && memdom_id1 == -1){
-            slog(KERN_CRIT, "smv gets memdom_id1: %s\n", token);
+	    slog(KERN_CRIT, "smv gets memdom_id1: %s\n", token);
             if( kstrtol(token, 10, &memdom_id1) )
                 return -1;
             continue;

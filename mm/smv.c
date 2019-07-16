@@ -228,12 +228,13 @@ int smv_join_memdom(int memdom_id, int smv_id){
         return -1;
     }
     up_read(&mm->smv_metadataMutex);
-
+    
     mutex_lock(&smv->smv_mutex);
     set_bit(memdom_id, smv->memdom_bitmapJoin);
     mutex_unlock(&smv->smv_mutex);
 
-    slog(KERN_INFO, "[%s] smv id %d joined memdom %d\n", __func__, smv_id, memdom_id);
+    slog(KERN_ERR, "[%s] smv id %d joined memdom %d\n", __func__, smv_id,
+	   memdom_id);
     return 0;
 }
 EXPORT_SYMBOL(smv_join_memdom);
@@ -296,7 +297,7 @@ int smv_is_in_memdom(int memdom_id, int smv_id){
     }
 
     down_read(&mm->smv_metadataMutex);
-    smv = current->mm->smv_metadata[smv_id];
+    smv = mm->smv_metadata[smv_id];
     up_read(&mm->smv_metadataMutex);
 
     if( !smv ) {
