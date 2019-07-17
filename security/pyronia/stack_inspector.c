@@ -14,7 +14,6 @@
 #include "include/pyronia.h"
 #include "include/stack_inspector.h"
 #include "include/si_comm.h"
-#include "include/callgraph.h"
 #include "include/lib_policy.h"
 
 int pyr_callstack_request_alloc(struct pyr_callstack_request **req) {  
@@ -51,6 +50,64 @@ void pyr_callstack_request_free(struct pyr_callstack_request **crp) {
   *crp = NULL;
 }
 
+// Deserialize a callstack-string received from userspace and
+// compute each parsed module's permissions
+// at each frame, and return the effective permission
+static int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
+                     char *callgraph, const char *name,
+                     u32 *perms) {
+
+    int err = 0;
+    u32 eff_perm = 0;
+    char *cur_lib = NULL, *num_str = NULL;
+    u32 num_nodes = 0, count = 0;
+
+    PYR_DEBUG("[%s] Callstack: %s\n", __func__, cs_str);
+    
+    // first token in the string is the number of callstack
+    // layers to expect
+    num_str = strsep(&callgraph, CALLSTACK_STR_DELIM);
+
+    err = kstrtou32(num_str, 10, &num_nodes);
+    if (err)
+        goto out;
+
+    cur_lib = strsep(&callgraph, CALLSTACK_STR_DELIM);
+    while(cur_lib && count < num_nodes) {
+
+        PYR_DEBUG("[%s] Computing permissions for %s... \n", __func__, name);
+
+        // take the intersection of the permissions
+        eff_perm &= pyr_get_lib_perms(lib_policy_db, cur_lib, name);
+
+        // a return value of TRANSITIVE_LIB_POLICY from pyr_get_lib_perms
+        // means that we don't have a policy for the library.
+        // In this initial call, it means the root already doesn't have
+        // permission to access name, so let's bail early
+        if (count == 0 && eff_perm == TRANSITIVE_LIB_POLICY) {
+            eff_perm = 0;
+            goto out;
+        }
+        // bail early since the callgraph so far already doesn't have
+        // access to `name`
+        else if (eff_perm == 0) {
+            goto out;
+        }
+
+        cur_lib = strsep(&callgraph, CALLSTACK_STR_DELIM);
+        count++;
+    }
+
+    // the string was somehow corrupted b/c we got fewer valid nodes than
+    // originally indicated
+    if (num_nodes > 0 && count < num_nodes)
+        eff_perm = 0;
+
+ out:
+    *perms = eff_perm;
+    return err;
+}
+
 /**
  * inspect_callstack - find the library permission that matches @name
  * @port_id: the runtime identifier from which to request the callstack
@@ -63,7 +120,7 @@ void pyr_callstack_request_free(struct pyr_callstack_request **crp) {
 void pyr_inspect_callstack(u32 port_id, struct pyr_lib_policy_db *lib_perm_db,
 			   const char *name, u32 *lib_perms) {
   
-  pyr_cg_node_t *callgraph = NULL;
+  char *callgraph = NULL;
   u32 perms = 0;
   struct pyr_callstack_request *req;
   
@@ -89,6 +146,7 @@ void pyr_inspect_callstack(u32 port_id, struct pyr_lib_policy_db *lib_perm_db,
   }
 
  out:
-  pyr_free_callgraph(&callgraph);
+  if (callgraph)
+      kvfree(callgraph);
   *lib_perms = perms;
 }

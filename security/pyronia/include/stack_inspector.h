@@ -18,6 +18,8 @@
 
 #define MAX_RECV_LEN 2048
 
+#define CALLSTACK_STR_DELIM ","
+
 struct pyr_callstack_request {
   u32 port_id;
   int runtime_responded;
