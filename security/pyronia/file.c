@@ -18,7 +18,6 @@
 #include "include/match.h"
 #include "include/path.h"
 #include "include/policy.h"
-#include "include/callgraph.h"
 #include "include/stack_inspector.h"
 #include "include/lib_policy.h"
 

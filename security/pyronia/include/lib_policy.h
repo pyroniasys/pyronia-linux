@@ -15,7 +15,6 @@
 #define __PYR_LIBPOLICY_H
 
 #include <linux/types.h>
-#include <uapi/linux/pyronia_mac.h>
 
 /* This is used to indicate to the stack inspector
  * that a library's permissions should be transitively

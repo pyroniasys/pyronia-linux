@@ -16,9 +16,7 @@
 #include <linux/delay.h>
 #include <linux/net.h>
 #include <uapi/linux/pyronia_netlink.h>
-#include <uapi/linux/pyronia_mac.h>
 
-#include "include/callgraph.h"
 #include "include/context.h"
 #include "include/policy.h"
 #include "include/si_comm.h"
@@ -101,10 +99,10 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
  * runtime's callstack from the given process, and return the callgraph
  * to the caller.
  * Expects the caller to hold the stack_request lock. */
-pyr_cg_node_t *pyr_stack_request(u32 pid)
+char *pyr_stack_request(u32 pid)
 {
     int err = 0;
-    pyr_cg_node_t *cg = NULL;
+    char *stack_str = NULL;
 
     if (!pid) {
       PYR_ERROR("[%s] Oops, cannot request callstack from pid = 0!!\n", __func__);
@@ -125,19 +123,17 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
 
     printk(KERN_CRIT "[%s] Received callstack from runtime\n", __func__);
 
-    if (!callstack_req->cg_buf) {
+    if (callstack_req->cg_buf[0] == '\0') {
       goto out;
     }
-    
-    // deserialize the callstack we've received from userland
-    if (pyr_deserialize_callstack(&cg, callstack_req->cg_buf)) {
+
+    if (set_str(callstack_req->cg_buf, &stack_str))
         goto out;
-    }
 
  out:
     memset(callstack_req->cg_buf, 0, MAX_RECV_LEN);
     callstack_req->runtime_responded = 0;
-    return cg;
+    return stack_str;
 }
 
 /* Return a pointer to the current callstack request.
