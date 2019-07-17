@@ -281,7 +281,7 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 
                 // check if we have a default policy for this address
                 if (pyr_is_default_lib_policy(profile->lib_perm_db, addr, &acl)) {
-                    lib_op = pyr_get_perms_from_acl(acl, addr);
+                    lib_op = pyr_get_perms_from_acl(acl);
                     printk(KERN_INFO "[%s] %s is default in profile %s\n",
                               __func__, addr, profile->base.name);
                 }
