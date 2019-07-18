@@ -12,7 +12,7 @@
  */
 
 #include <linux/string.h>
-
+#include <uapi/linux/pyronia.h>
 #include "include/pyronia.h"
 #include "include/lib_policy.h"
 #include "include/policy.h"

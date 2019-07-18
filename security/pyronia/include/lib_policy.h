@@ -22,11 +22,6 @@
  */
 #define TRANSITIVE_LIB_POLICY 0xffffffff
 
-#define SI_PORT_STR_DELIM ":"
-#define LIB_RULE_STR_DELIM ","
-#define RESOURCE_STR_DELIM " "
-#define DEFAULT_NAME "d"
-
 /* pyr_lib_perms defines the possible permissions a library can
  * have under Pyronia
  */
@@ -41,6 +36,17 @@ enum pyr_lib_perms {
     // write access of a specified data type to a specified net addr
     NET_W_PERM,
     EXEC_PERM, //exec access of a specified binary
+};
+
+/** pyr_data_types defines the possible expected sensitive
+ * data types obtained from sensors or files
+ */
+enum pyr_data_types {
+    CAM_DATA,
+    MIC_DATA,
+    ENV_DATA,
+    MISC_FILE_DATA,
+    // TODO: add more fine-grained types
 };
 
 struct path;

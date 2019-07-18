@@ -11,6 +11,8 @@
  * License.
  */
 
+#include <uapi/linux/pyronia.h>
+
 #include "include/pyronia.h"
 #include "include/stack_inspector.h"
 #include "include/si_comm.h"
@@ -58,11 +60,11 @@ static int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
                      u32 *perms) {
 
     int err = 0;
-    u32 eff_perm = 0;
+    u32 eff_perm = TRANSITIVE_LIB_POLICY;
     char *cur_lib = NULL, *num_str = NULL;
     u32 num_nodes = 0, count = 0;
 
-    PYR_DEBUG("[%s] Callstack: %s\n", __func__, cs_str);
+    PYR_DEBUG(KERN_CRIT "[%s] Callstack: %s\n", __func__, callgraph);
     
     // first token in the string is the number of callstack
     // layers to expect

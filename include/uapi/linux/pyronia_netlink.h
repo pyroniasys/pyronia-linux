@@ -8,8 +8,6 @@
 #ifndef __PYR_SI_COMM_H
 #define __PYR_SI_COMM_H
 
-#include "pyronia_mac.h"
-
 #define STACK_REQ_CMD 0
 #define VERSION_NR 1
 

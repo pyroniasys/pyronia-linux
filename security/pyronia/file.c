@@ -339,7 +339,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
                 // library perms are simply the default perms we
                 // gathered from the loaded profile
                 lib_perms = pyr_get_perms_from_acl(acl);
-                printk(KERN_INFO "[%s] %s is default in profile %s\n", __func__,
+                PYR_DEBUG("[%s] %s is default in profile %s\n", __func__,
                           name, profile->base.name);
             }
             else {
