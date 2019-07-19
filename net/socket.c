@@ -108,6 +108,8 @@
 #include <net/busy_poll.h>
 #include <linux/errqueue.h>
 
+#include <linux/pyronia_internal.h>
+
 #ifdef CONFIG_NET_RX_BUSY_POLL
 unsigned int sysctl_net_busy_read __read_mostly;
 unsigned int sysctl_net_busy_poll __read_mostly;
@@ -1520,6 +1522,8 @@ SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
 	struct socket *sock;
 	struct sockaddr_storage address;
 	int err, fput_needed;
+
+        copy_userspace_stack_hash((void __user **)&uservaddr, SOCKADDR_RESOURCE);
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (!sock)

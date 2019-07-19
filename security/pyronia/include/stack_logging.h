@@ -19,14 +19,17 @@
 
 #define MAX_LOGGED_HASHES 16
 
-typedef struct stack_hash { unsigned char h[SHA256_DIGEST_SIZE]; } stack_hash_t;
+typedef struct stack_hash {
+    unsigned char h[SHA256_DIGEST_SIZE];
+    u32 perms;
+} stack_hash_t;
 
 // forward declare
 struct pyr_acl_entry;
 
 int init_stack_logging_hash(void);
 int compute_callstack_hash(char *, unsigned char *);
-int log_callstack_hash(unsigned char *, struct pyr_acl_entry *);
-int verify_callstack_hash(unsigned char *, struct pyr_acl_entry *);
+int log_callstack_hash(unsigned char *, u32, struct pyr_acl_entry *);
+int verify_callstack_hash(struct pyr_acl_entry *, u32 *);
 
 #endif /* __PYR_STACKLOGGING_H */

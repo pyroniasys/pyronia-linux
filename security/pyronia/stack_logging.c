@@ -13,12 +13,14 @@
 
 #include <linux/string.h>
 #include <crypto/hash.h>
+#include <linux/pyronia_internal.h>
 
 #include "include/pyronia.h"
 #include "include/stack_logging.h"
 #include "include/lib_policy.h"
 
 static struct crypto_shash *sl_tfm;
+static struct stack_hash *pending_user_hash;
 
 int init_stack_logging_hash() {
   struct crypto_shash *tfm;
@@ -31,6 +33,8 @@ int init_stack_logging_hash() {
   }
   sl_tfm = tfm;
   printk(KERN_ERR "[%s] done\n", __func__);
+
+  pending_user_hash = NULL;
   
   return 0;
 }
@@ -104,7 +108,8 @@ int compute_callstack_hash(char *stack_str, unsigned char *hash) {
     return err;
 }
 
-int log_callstack_hash(unsigned char *hash, struct pyr_acl_entry *entry) {
+int log_callstack_hash(unsigned char *hash, u32 perms,
+                       struct pyr_acl_entry *entry) {
     int err = -1;
     int log_idx = -1;
 
@@ -121,6 +126,7 @@ int log_callstack_hash(unsigned char *hash, struct pyr_acl_entry *entry) {
 
     memset(entry->logged_stack_hashes[log_idx].h, 0, SHA256_DIGEST_SIZE);
     memcpy(entry->logged_stack_hashes[log_idx].h, hash, SHA256_DIGEST_SIZE);
+    entry->logged_stack_hashes[log_idx].perms = perms;
     entry->num_logged_hashes++;
     err = 0;
 
@@ -128,6 +134,69 @@ int log_callstack_hash(unsigned char *hash, struct pyr_acl_entry *entry) {
     return err;
 }
 
-int verify_callstack_hash(unsigned char *recv_hash, struct pyr_acl_entry *entry) {
+int verify_callstack_hash(struct pyr_acl_entry *entry, u32 *perms) {
+    if (pending_user_hash) {
+        printk(KERN_ERR "[%s] Have hash for resource %s\n", __func__, entry->resource);
+        kvfree(pending_hash);
+        pending_hash = NULL;
+    }
+    *perms = 0;
     return 0;
+}
+
+/** Copy the userspace hash pointed to by the resource pointer
+ * into a kernelspace buffer, and extracts the requested resource
+ * from the resource pointer.
+ */
+int copy_userspace_stack_hash(void __user **resourcep,
+                                enum pyr_user_resource resource_type) {
+    int copied = 0;
+    struct pyr_userspace_stack_hash __user *uh = NULL;
+    struct stack_hash *pending_hash = NULL;
+
+    uh = (struct pyr_userspace_stack_hash __user *)*resourcep;
+    if (uh == NULL)
+        goto out;
+
+    printk(KERN_CRIT "[%s] ");
+    
+    // let's parse out the requested resource either way
+    switch(resource_type) {
+    case FILENAME_RESOURCE:
+        if (uh->resource.filename == NULL)
+            goto out;
+        *resourcep = (void __user *)uh->resource.filename;
+        break;
+    case SOCKADDR_RESOURCE:
+        if (uh->resouce.addr == NULL)
+            goto out;
+        *resourcep = (void __user *)uh->resource.addr;
+        break;
+    default:
+        printk(KERN_ERR "[%s] Unknown userspace resource type\n", __func__);
+        goto out;
+    }
+
+    if (!uh->includes_stack)
+        goto out;
+
+    printk(KERN_ERR "[%s] resource includes hash\n", __func__);
+
+    if (pending_hash) {
+        printk(KERN_CRIT "[%s] Ignoring new incoming hash\n");
+        goto out;
+    }
+    
+    // copy hash over
+    pending_hash = kvzalloc(sizeof(struct stack_hash));
+    if (!pending_hash)
+        goto out;
+
+    if (copy_from_user(pending_hash.h, uh->hash, SHA256_DIGEST_SIZE))
+        goto out;
+    
+    print_hash(pending_hash.h);
+    copied = 1;
+ out:
+    return copied;
 }
