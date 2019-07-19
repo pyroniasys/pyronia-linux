@@ -26,35 +26,6 @@ enum regex_type {
 	MATCH_END_ONLY,
 };
 
-// Recursively free the ACL entries
-static void free_acl_entry(struct pyr_acl_entry **entry) {
-    struct pyr_acl_entry *e = *entry;
-
-    if (e == NULL) {
-      return;
-    }
-
-    if (e->next != NULL) {
-      free_acl_entry(&e->next);
-    }
-    
-    e->num_logged_hashes = 0;
-    memset(e->logged_stack_hashes, 0, MAX_LOGGED_HASHES*sizeof(stack_hash_t));
-    switch (e->entry_type) {
-    case(resource_entry):
-      kvfree(e->target.fs_resource.name);
-      break;
-    case(net_entry):
-      kvfree(e->target.net_dest.name);
-      break;
-    default:
-      // FIXME: set errno here or something
-      break;
-    }
-    kvfree(e);    
-    *entry = NULL;
-}
-
 // Recursively free the lib policies
 static void free_lib_policy(struct pyr_lib_policy **policy) {
     struct pyr_lib_policy *p = *policy;
@@ -67,39 +38,35 @@ static void free_lib_policy(struct pyr_lib_policy **policy) {
       free_lib_policy(&p->next);
     }
 
-    kvfree(p->lib);
-    free_acl_entry(&p->acl);
+    kvfree(p->lib_name);
     kvfree(p);
     *policy = NULL;
 }
 
-// Set the ACL entry fields accodring to the given data
-static int set_acl_entry(struct pyr_acl_entry *entry,
-                         enum acl_entry_type entry_type,
-                         const char *name, u32 perms) {
+// Recursively free the ACL entries
+static void free_acl_entry(struct pyr_acl_entry **entry) {
+    struct pyr_acl_entry *e = *entry;
+    int i = 0;
 
-    entry->entry_type = entry_type;
-    switch(entry->entry_type) {
-        case(resource_entry):
-	    if (set_str(name, &entry->target.fs_resource.name))
-	        goto fail;
-            entry->target.fs_resource.perms = perms;
-            break;
-        case(net_entry):
-	    if (set_str(name, &entry->target.net_dest.name))
-	        goto fail;
-            entry->target.net_dest.op = perms;
-            break;
-        default:
-            PYR_ERROR("[%s] Unknown entry type: %d\n", __func__, entry->entry_type);
-            goto fail;
+    if (e == NULL) {
+      return;
     }
-    entry->num_logged_hashes = 0;
-    memset(entry->logged_stack_hashes, 0, MAX_LOGGED_HASHES*sizeof(stack_hash_t));
-    return 0;
 
- fail:
-    return -1;
+    if (e->next != NULL) {
+      free_acl_entry(&e->next);
+    }
+
+    free_lib_policy(&e->auth_libs);
+    e->num_logged_hashes = 0;
+    for (i = 0; i < MAX_LOGGED_HASHES; i++) {
+        memset(e->logged_stack_hashes[i].h, 0, SHA256_DIGEST_SIZE);
+        e->logged_stack_hashes[i].perms = 0;
+    }
+    if (e->resource)
+        kvfree(e->resource);
+    
+    kvfree(e);    
+    *entry = NULL;
 }
 
 // Allocates a new ACL entry and adds it to the ACL pointed to by `acl`.
@@ -108,17 +75,24 @@ static int set_acl_entry(struct pyr_acl_entry *entry,
 // Returns 0 on success, -1 on failure
 static int pyr_add_acl_entry(struct pyr_acl_entry **acl,
                       enum acl_entry_type entry_type,
-                      const char *name,
-                      u32 perms) {
+                      const char *name) {
     struct pyr_acl_entry *new_entry = kvzalloc(sizeof(struct pyr_acl_entry));
-
+    int i = 0;
+    
     if (new_entry == NULL) {
         goto fail;
     }
 
-    if (set_acl_entry(new_entry, entry_type, name, perms))
+    new_entry->entry_type = entry_type;
+    if (set_str(name, &new_entry->resource))
         goto fail;
-
+    new_entry->auth_libs = NULL;
+    new_entry->num_logged_hashes = 0;
+    for (i = 0; i < MAX_LOGGED_HASHES; i++) {
+        memset(new_entry->logged_stack_hashes[i].h, 0, SHA256_DIGEST_SIZE);
+        new_entry->logged_stack_hashes[i].perms = 0;
+    }
+    
     // TODO: track data types
     new_entry->data_type = 0;
     // insert at head of linked list
@@ -236,7 +210,7 @@ static int name_regex_match(char *acl_name, const char *to_match) {
 
 // Finds the ACL entry for `name` in the given linked list `start`.
 // Returns null if no entry for `name` exists.
-static struct pyr_acl_entry *pyr_find_acl_entry(struct pyr_acl_entry *start,                                                 const char *name) {
+struct pyr_acl_entry *pyr_find_acl_entry(struct pyr_acl_entry *start,                                                 const char *name) {
 
     // traverse the ACL entry linked list, start at the head
     struct pyr_acl_entry *runner = start;
@@ -244,22 +218,10 @@ static struct pyr_acl_entry *pyr_find_acl_entry(struct pyr_acl_entry *start,    
     while (runner != NULL) {
         // we have two types of entries, so need to check the type
         // on each before we determine if we've found the requested ACL entry
-        switch (runner->entry_type) {
-        case(resource_entry):
-	  if (name_regex_match(runner->target.fs_resource.name, name)) {
+        if (name_regex_match(runner->resource, name)) {
                 return runner;
-            }
-            break;
-        case(net_entry):
-	  if (name_regex_match(runner->target.net_dest.name, name)) {
-                return runner;
-            }
-            break;
-        default:
-            // FIXME: set errno here or something
-            return NULL;
         }
-
+        
         runner = runner->next;
     }
 
@@ -270,14 +232,14 @@ static struct pyr_acl_entry *pyr_find_acl_entry(struct pyr_acl_entry *start,    
 
 // Finds the lib policy for `lib` in the policy DB given by `policy_db`.
 // Returns null if no entry for `lib` exists.
-static struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *policy_db, const char *lib) {
+static struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_acl_entry *acl, const char *lib) {
 
     // traverse the policy linked list, start at the head
-    struct pyr_lib_policy *runner = policy_db->perm_db_head;
+    struct pyr_lib_policy *runner = acl->auth_libs;
 
     while (runner != NULL) {
-        if (!strncmp(runner->lib, lib, strlen(runner->lib))) {
-	  PYR_DEBUG("[%s] Found policy for library %s\n", __func__, runner->lib);
+        if (!strncmp(runner->lib_name, lib, strlen(runner->lib_name))) {
+	  PYR_DEBUG("[%s] Found policy for library %s\n", __func__, runner->lib_name);
 	  return runner;
         }
         runner = runner->next;
@@ -287,18 +249,17 @@ static struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *pol
     return NULL;
 }
 
-// Returns the allowed permissions or operations associated
-// with the given ACL entry
-u32 pyr_get_perms_from_acl(struct pyr_acl_entry *acl) {
-    switch (acl->entry_type) {
-        case(resource_entry):
-            return acl->target.fs_resource.perms;
-        case(net_entry):
-            return acl->target.net_dest.op;
-        default:
-            // FIXME: set errno here or something
-            return 0;
-        }
+// Returns the allowed permissions or operations for the given library
+// associated with the given ACL entry
+u32 pyr_get_lib_perms(struct pyr_acl_entry *acl, const char *lib) {
+    struct pyr_lib_policy *auth_lib = NULL;
+
+    auth_lib = pyr_find_lib_policy(acl, lib);
+    if (auth_lib == NULL)
+        return 0;
+
+    else
+        return auth_lib->perms;
 }
 
 // Allocates a new library policy and adds it to the policy DB pointed to
@@ -315,26 +276,9 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db *policy_db,
     struct pyr_lib_policy *policy;
     struct pyr_acl_entry *acl;
 
-    policy = pyr_find_lib_policy(policy_db, lib);
-    if (!policy) {
-        policy = kvzalloc(sizeof(struct pyr_lib_policy));
-        if (!policy) {
-            PYR_ERROR("[%s] no mem for %s policy\n", __func__, lib);
-            goto fail;
-        }
-	if (set_str(lib, &policy->lib))
-	  goto fail;
-	policy->acl = NULL;
-	policy->next = NULL;
-
-	// insert at head of linked list
-	policy->next = policy_db->perm_db_head;
-	policy_db->perm_db_head = policy;
-    }
-
-    acl = pyr_find_acl_entry(policy->acl, name);
+    acl = pyr_find_acl_entry(policy_db->lib_policies, name);
     if (!acl) {
-        if (pyr_add_acl_entry(&policy->acl, entry_type, name, perms)) {
+        if (pyr_add_acl_entry(&policy_db->lib_policies, entry_type, name)) {
             goto fail;
         }
     }
@@ -342,23 +286,35 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db *policy_db,
         // There can only be one type of ACL entry per resource, so
         // ignore the new perms if the entry types conflict, but don't
         // throw an error
-        if (policy->acl->entry_type != entry_type) {
+        if (acl->entry_type != entry_type) {
 	  PYR_ERROR("[%s] Oops, attempting to modify the entry type for %s\n", __func__, name);
 	  goto out;
         }
-
-	PYR_DEBUG("[%s] Changing ACL entry for %s\n", __func__, name);
-        if (set_acl_entry(policy->acl, entry_type, name, perms))
+    }
+    
+    policy = pyr_find_lib_policy(acl, lib);
+    if (!policy) {
+        policy = kvzalloc(sizeof(struct pyr_lib_policy));
+        if (!policy) {
+            PYR_ERROR("[%s] no mem for %s policy\n", __func__, lib);
             goto fail;
+        }
+	if (set_str(lib, &policy->lib_name))
+	  goto fail;
+        policy->perms = perms;
+
+        // insert at head of linked list
+	policy->next = acl->auth_libs;
+        acl->auth_libs = policy;
     }
 
-    PYR_DEBUG("[%s] Added policy %p for %s, next %p\n", __func__, policy_db->perm_db_head, lib, policy_db->perm_db_head->next);
+    PYR_DEBUG("[%s] Added policy %p for %s, next %p\n", __func__, policy_db->lib_policies, lib, policy_db->lib_policies->next);
 
     
  out:
     return 0;
  fail:
-    free_lib_policy(&policy);
+    free_acl_entry(&acl);
     return -1;
 }
 
@@ -370,13 +326,12 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db *policy_db,
 // this function returns.
 // Returns 0 on success, -1 on failure
 int pyr_add_default(struct pyr_lib_policy_db *policy_db,
-                    enum acl_entry_type entry_type, const char *name,
-                    u32 perms) {
+                    enum acl_entry_type entry_type, const char *name) {
     struct pyr_acl_entry *acl;
 
     acl = pyr_find_acl_entry(policy_db->defaults, name);
     if (!acl) {
-        if (pyr_add_acl_entry(&policy_db->defaults, entry_type, name, perms)) {
+        if (pyr_add_acl_entry(&policy_db->defaults, entry_type, name)) {
             goto fail;
         }
     }
@@ -387,9 +342,6 @@ int pyr_add_default(struct pyr_lib_policy_db *policy_db,
         if (policy_db->defaults->entry_type != entry_type) {
             goto out;
         }
-
-        if (set_acl_entry(policy_db->defaults, entry_type, name, perms))
-            goto fail;
     }
 
  out:
@@ -398,40 +350,8 @@ int pyr_add_default(struct pyr_lib_policy_db *policy_db,
     return -1;
 }
 
-// Gets the permissions for the given resource from the library's policy
-u32 pyr_get_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
-                      const char *lib, const char *name) {
-    struct pyr_lib_policy *policy;
-    struct pyr_acl_entry *acl;
-
-    if (!lib_policy_db)
-      return 0;
-    
-    // we don't have a policy for this `lib`, so
-    // uphold our default-deny policy
-    policy = pyr_find_lib_policy(lib_policy_db, lib);
-
-    // if we don't have an explicit policy for this library,
-    // we use transitive effective permissions
-    if (!policy) {
-        return TRANSITIVE_LIB_POLICY;
-    }
-
-    acl = pyr_find_acl_entry(policy->acl, name);
-
-    // we don't have an entry in our ACL for this `name`,
-    // so the library doesn't have any permissions to access `name`.
-    // default-deny policy
-    if (acl == NULL) {
-        return 0;
-    }
-
-    return pyr_get_perms_from_acl(acl);
-}
-
 int pyr_is_default_lib_policy(struct pyr_lib_policy_db *lib_policy_db,
-                              const char *name,
-                              struct pyr_acl_entry **found) {
+                              const char *name) {
     struct pyr_acl_entry *acl = NULL;
     int is_def = 0;
 
@@ -443,7 +363,6 @@ int pyr_is_default_lib_policy(struct pyr_lib_policy_db *lib_policy_db,
         is_def = 1;
     }
 
-    *found = acl;
     return is_def;
 }
 
@@ -456,7 +375,7 @@ int pyr_new_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
         goto fail;
     }
 
-    db->perm_db_head = NULL;
+    db->lib_policies = NULL;
     db->defaults = NULL;
     *policy_db = db;
 
@@ -476,7 +395,7 @@ void pyr_free_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
     if (db == NULL)
       return;
 
-    free_lib_policy(&db->perm_db_head);
+    free_acl_entry(&db->lib_policies);
     free_acl_entry(&db->defaults);
     kvfree(db);
     *policy_db = NULL;
@@ -541,7 +460,7 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
         // or library
         if (!strncmp(next_lib, DEFAULT_NAME, 1)) {
             err = pyr_add_default(profile->lib_perm_db, next_type,
-                                  next_name, next_perms);
+                                  next_name);
         }
         else {
             err = pyr_add_lib_policy(profile->lib_perm_db, next_lib,

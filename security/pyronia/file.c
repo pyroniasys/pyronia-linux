@@ -298,7 +298,6 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
         char *buffer = NULL;
         struct file_perms perms = {};
         u32 lib_perms = 0;
-        struct pyr_acl_entry *acl = NULL;
         const char *name = NULL, *info = NULL;
         int error;
 
@@ -334,11 +333,11 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
                 goto audit;
             }
 
-            if (pyr_is_default_lib_policy(profile->lib_perm_db, name, &acl)) {
+            if (pyr_is_default_lib_policy(profile->lib_perm_db, name)) {
                 // the requested resource is a default resource, so our
                 // library perms are simply the default perms we
                 // gathered from the loaded profile
-                lib_perms = pyr_get_perms_from_acl(acl);
+                lib_perms = perms.allow;
                 PYR_DEBUG("[%s] %s is default in profile %s\n", __func__,
                           name, profile->base.name);
             }

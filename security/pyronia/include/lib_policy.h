@@ -60,21 +60,14 @@ enum acl_entry_type {
     net_entry,
 };
 
-// contains the permissions
-// for a file system resource-based
-// permissions
-struct resource_entry {
-    char *name;
+// the permissions given to a specific library
+// to a resource/network
+struct pyr_lib_policy {
+    char *lib_name;
     // this is the OR of various file access permissions
     // need to match with requested & ~perms to allow
     u32 perms;
-};
-
-struct net_entry {
-    char *name;
-    // this is the OR of various permitted network operations
-    // need to match with requested_op & ~op to allow
-    u32 op;
+    struct pyr_lib_policy *next;
 };
 
 // this is an individual entry in the ACL for
@@ -82,29 +75,15 @@ struct net_entry {
 struct pyr_acl_entry {
 
     enum acl_entry_type entry_type;
+    char *resource;
 
-    union {
-        struct resource_entry fs_resource;
-        struct net_entry net_dest;
-    } target;
-
+    struct pyr_lib_policy *auth_libs;
     int num_logged_hashes;
     stack_hash_t logged_stack_hashes[MAX_LOGGED_HASHES];
 
     // TODO: currently unused
     enum pyr_data_types data_type;
     struct pyr_acl_entry *next;
-};
-
-/* An individual library policy for an application.
- * lib: the library this policy belongs too
- * acl: the ACL containing the library's permissions
- * next: the next entry in the library policy database
- */
-struct pyr_lib_policy {
-    char* lib;
-    struct pyr_acl_entry *acl;
-    struct pyr_lib_policy *next;
 };
 
 /* An application's Pyronia library policy database.
@@ -114,19 +93,17 @@ struct pyr_lib_policy {
  *      by all libraries so long as the requested access matches
  */
 struct pyr_lib_policy_db {
-    struct pyr_lib_policy *perm_db_head;
+    struct pyr_acl_entry *lib_policies;
     struct pyr_acl_entry *defaults;
 };
 
 int pyr_add_lib_policy(struct pyr_lib_policy_db *, const char *,
                        enum acl_entry_type, const char *, u32);
 int pyr_add_default(struct pyr_lib_policy_db *, enum acl_entry_type,
-                    const char *, u32);
-u32 pyr_get_perms_from_acl(struct pyr_acl_entry *acl);
-u32 pyr_get_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
-                      const char *lib, const char *name);
-int pyr_is_default_lib_policy(struct pyr_lib_policy_db *,
-                              const char *, struct pyr_acl_entry **);
+                    const char *);
+struct pyr_acl_entry *pyr_find_acl_entry(struct pyr_acl_entry *,                                                 const char *);
+u32 pyr_get_lib_perms(struct pyr_acl_entry *, const char *);
+int pyr_is_default_lib_policy(struct pyr_lib_policy_db *, const char *);
 int pyr_new_lib_policy_db(struct pyr_lib_policy_db **);
 void pyr_free_lib_policy_db(struct pyr_lib_policy_db **);
 
