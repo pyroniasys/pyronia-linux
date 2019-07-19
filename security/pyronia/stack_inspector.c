@@ -17,6 +17,7 @@
 #include "include/stack_inspector.h"
 #include "include/si_comm.h"
 #include "include/lib_policy.h"
+#include "include/stack_logging.h"
 
 int pyr_callstack_request_alloc(struct pyr_callstack_request **req) {  
   struct pyr_callstack_request *r = kvzalloc(sizeof(struct pyr_callstack_request));
@@ -63,8 +64,15 @@ static int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
     u32 eff_perm = TRANSITIVE_LIB_POLICY;
     char *cur_lib = NULL, *num_str = NULL;
     u32 num_nodes = 0, count = 0;
-
+    unsigned char stack_hash[SHA256_DIGEST_SIZE];
+    
     PYR_DEBUG(KERN_CRIT "[%s] Callstack: %s\n", __func__, callgraph);
+
+    // let's get the hash before we start parsing the string
+    err = compute_callstack_hash(callgraph, stack_hash);
+
+    if (err)
+        goto out;
     
     // first token in the string is the number of callstack
     // layers to expect

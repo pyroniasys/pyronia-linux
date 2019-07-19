@@ -35,7 +35,9 @@ static void free_acl_entry(struct pyr_acl_entry **entry) {
     if (e->next != NULL) {
       free_acl_entry(&e->next);
     }
-
+    
+    e->num_logged_hashes = 0;
+    memset(e->logged_stack_hashes, 0, MAX_LOGGED_HASHES*sizeof(stack_hash_t));
     switch (e->entry_type) {
     case(resource_entry):
       kvfree(e->target.fs_resource.name);
@@ -90,6 +92,8 @@ static int set_acl_entry(struct pyr_acl_entry *entry,
             PYR_ERROR("[%s] Unknown entry type: %d\n", __func__, entry->entry_type);
             goto fail;
     }
+    entry->num_logged_hashes = 0;
+    memset(entry->logged_stack_hashes, 0, MAX_LOGGED_HASHES*sizeof(stack_hash_t));
     return 0;
 
  fail:

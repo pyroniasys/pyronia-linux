@@ -15,6 +15,7 @@
 #define __PYR_LIBPOLICY_H
 
 #include <linux/types.h>
+#include "stack_logging.h"
 
 /* This is used to indicate to the stack inspector
  * that a library's permissions should be transitively
@@ -86,6 +87,9 @@ struct pyr_acl_entry {
         struct resource_entry fs_resource;
         struct net_entry net_dest;
     } target;
+
+    int num_logged_hashes;
+    stack_hash_t logged_stack_hashes[MAX_LOGGED_HASHES];
 
     // TODO: currently unused
     enum pyr_data_types data_type;
