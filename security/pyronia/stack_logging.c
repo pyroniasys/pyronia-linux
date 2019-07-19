@@ -14,6 +14,7 @@
 #include <linux/string.h>
 #include <crypto/hash.h>
 #include <linux/pyronia_internal.h>
+#include <uapi/linux/pyronia.h>
 
 #include "include/pyronia.h"
 #include "include/stack_logging.h"
@@ -137,8 +138,8 @@ int log_callstack_hash(unsigned char *hash, u32 perms,
 int verify_callstack_hash(struct pyr_acl_entry *entry, u32 *perms) {
     if (pending_user_hash) {
         printk(KERN_ERR "[%s] Have hash for resource %s\n", __func__, entry->resource);
-        kvfree(pending_hash);
-        pending_hash = NULL;
+        kvfree(pending_user_hash);
+        pending_user_hash = NULL;
     }
     *perms = 0;
     return 0;
@@ -158,7 +159,7 @@ int copy_userspace_stack_hash(void __user **resourcep,
     if (uh == NULL)
         goto out;
 
-    printk(KERN_CRIT "[%s] ");
+    printk(KERN_CRIT "[%s] ", __func__);
     
     // let's parse out the requested resource either way
     switch(resource_type) {
@@ -183,7 +184,7 @@ int copy_userspace_stack_hash(void __user **resourcep,
     printk(KERN_ERR "[%s] resource includes hash\n", __func__);
 
     if (pending_hash) {
-        printk(KERN_CRIT "[%s] Ignoring new incoming hash\n");
+        printk(KERN_CRIT "[%s] Ignoring new incoming hash\n", __func__);
         goto out;
     }
     
@@ -192,10 +193,12 @@ int copy_userspace_stack_hash(void __user **resourcep,
     if (!pending_hash)
         goto out;
 
-    if (copy_from_user(pending_hash.h, uh->hash, SHA256_DIGEST_SIZE))
+    if (copy_from_user(pending_hash->h, uh->hash, SHA256_DIGEST_SIZE))
         goto out;
-    
-    print_hash(pending_hash.h);
+
+    pending_hash->perms = 0;
+    print_hash(pending_hash->h);
+    pending_user_hash = pending_hash;
     copied = 1;
  out:
     return copied;

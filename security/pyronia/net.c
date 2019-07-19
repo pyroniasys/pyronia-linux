@@ -231,7 +231,6 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
         int error = 0;
         unsigned short sock_family = 0;
         u32 lib_op = 0;
-        struct pyr_acl_entry *acl = NULL;
         const char *addr = NULL;
 
         /* pyr_revalidate_sk should not be called from interrupt context
