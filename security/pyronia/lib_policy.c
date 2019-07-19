@@ -13,6 +13,8 @@
 
 #include <linux/string.h>
 #include <uapi/linux/pyronia.h>
+#include <crypto/hash.h>
+
 #include "include/pyronia.h"
 #include "include/lib_policy.h"
 #include "include/policy.h"
@@ -457,6 +459,8 @@ int pyr_new_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
     db->perm_db_head = NULL;
     db->defaults = NULL;
     *policy_db = db;
+
+    init_stack_logging_hash();
 
     return 0;
  fail:

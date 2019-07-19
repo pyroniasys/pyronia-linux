@@ -24,6 +24,7 @@ typedef struct stack_hash { unsigned char h[SHA256_DIGEST_SIZE]; } stack_hash_t;
 // forward declare
 struct pyr_acl_entry;
 
+int init_stack_logging_hash(void);
 int compute_callstack_hash(char *, unsigned char *);
 int log_callstack_hash(unsigned char *, struct pyr_acl_entry *);
 int verify_callstack_hash(unsigned char *, struct pyr_acl_entry *);

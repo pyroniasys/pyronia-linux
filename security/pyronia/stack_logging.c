@@ -12,37 +12,69 @@
  */
 
 #include <linux/string.h>
-#include <linux/crypto.h>
-#include <linux/err.h>
-#include <linux/scatterlist.h>
+#include <crypto/hash.h>
+
+#include "include/pyronia.h"
 #include "include/stack_logging.h"
 #include "include/lib_policy.h"
 
+static struct crypto_shash *sl_tfm;
+
+int init_stack_logging_hash() {
+  struct crypto_shash *tfm;
+
+  tfm = crypto_alloc_shash("sha256", 0, CRYPTO_ALG_TYPE_SHASH);
+  if (IS_ERR(tfm)) {
+    int error = PTR_ERR(tfm);
+    PYR_ERROR("failed to setup profile sha1 hashing: %d\n", error);
+    return error;
+  }
+  sl_tfm = tfm;
+  printk(KERN_ERR "[%s] done\n", __func__);
+  
+  return 0;
+}
+
 static inline int generate_sha256(unsigned char *data, size_t len,
                                   unsigned char **hash) {
-    struct scatterlist sg;
-    struct crypto_hash *tfm;
-    struct hash_desc desc;
+  int err = -1;
+  struct {
+    struct shash_desc shash;
+    char ctx[crypto_shash_descsize(sl_tfm)];
+  } desc;
 
+    if (!sl_tfm)
+        goto out;
+  
     if (!hash) {
         printk(KERN_ERR "[%s] Need hash destination\n", __func__);
-        return -1;
+	goto out;
     }
     memset(*hash, 0, SHA256_DIGEST_SIZE);
 
-    tfm = crypto_alloc_hash("sha256", 0, CRYPTO_ALG_HASH);
+    desc.shash.tfm = sl_tfm;
+    desc.shash.flags = 0;
 
-    desc.tfm = tfm;
-    desc.flags = 0;
+    err = crypto_shash_init(&desc.shash);
+    if (err) {
+      printk(KERN_ERR "[%s] Could not init shash\n", __func__);
+      goto out;
+    } 
 
-    sg_init_one(&sg, data, len);
-    crypto_hash_init(&desc);
+    err = crypto_shash_update(&desc.shash, data, len);
+    if (err) {
+      printk(KERN_ERR "[%s] Could not update shash\n", __func__);
+      goto out;
+    }
+    
+    err = crypto_shash_final(&desc.shash, *hash);
+    if (err) {
+      printk(KERN_ERR "[%s] Could not finalize shash\n", __func__);
+      goto out;
+    }
 
-    crypto_hash_update(&desc, &sg, len);
-    crypto_hash_final(&desc, *hash);
-    crypto_free_hash(tfm);
-
-    return 0;
+ out:
+    return err;
 }
 
 static inline void print_hash(unsigned char *hash) {
@@ -87,11 +119,7 @@ int log_callstack_hash(unsigned char *hash, struct pyr_acl_entry *entry) {
         goto out;
     }
 
-    if (entry->logged_stack_hashes[log_idx] != NULL) {
-        printk(KERN_CRIT "[%s] Trying to override an existing logged hash\n", __func__);
-        goto out;
-    }
-
+    memset(entry->logged_stack_hashes[log_idx].h, 0, SHA256_DIGEST_SIZE);
     memcpy(entry->logged_stack_hashes[log_idx].h, hash, SHA256_DIGEST_SIZE);
     entry->num_logged_hashes++;
     err = 0;
