@@ -85,10 +85,10 @@ static int pyr_compute_lib_perms(struct pyr_acl_entry *req_acl,
     cur_lib = strsep(&callgraph, CALLSTACK_STR_DELIM);
     while(cur_lib && count < num_nodes) {
 
-        PYR_DEBUG("[%s] Computing permissions for %s... \n", __func__, name);
+        PYR_DEBUG("[%s] Computing permissions for %s... \n", __func__, cur_lib);
 
         // take the intersection of the permissions
-        eff_perm &= pyr_get_lib_perms(req_acl, cur_lib, name);
+        eff_perm &= pyr_get_lib_perms(req_acl, cur_lib);
 
         // a return value of TRANSITIVE_LIB_POLICY from pyr_get_lib_perms
         // means that we don't have a policy for the library.
@@ -115,8 +115,8 @@ static int pyr_compute_lib_perms(struct pyr_acl_entry *req_acl,
 
     // record the stack hash if we are granting the request
     if (eff_perm > 0 && eff_perm != TRANSITIVE_LIB_POLICY)
-        //err = log_callstack_hash(stack_hash, eff_perm, req_acl);
-        printk(KERN_ERR "[%s] Good to log this hash\n", __func__);
+        err = log_callstack_hash(stack_hash, eff_perm, req_acl);
+    PYR_DEBUG("[%s] Good to log hash for %s\n", __func__, req_acl->resource);
     
  out:
     *perms = eff_perm;
@@ -141,13 +141,15 @@ void pyr_inspect_callstack(u32 port_id, struct pyr_lib_policy_db *lib_perm_db,
   struct pyr_acl_entry *req_acl = NULL;
   int verified_stack = 0;
 
-  req_acl = pyr_find_acl_entry(lib_policy_db->lib_policies, name);
+  req_acl = pyr_find_acl_entry(lib_perm_db->lib_policies, name);
   if (!req_acl)
       goto out;
 
   verified_stack = verify_callstack_hash(req_acl, &perms);
-  if (verified_stack)
+  if (verified_stack) {
+      printk(KERN_INFO "[%s] Found verified hash for %s\n", __func__, req_acl->resource);
       goto out;
+  }
   
   // upcall to language runtime for callstack
   req = pyr_get_current_callstack_request();
@@ -169,6 +171,8 @@ void pyr_inspect_callstack(u32 port_id, struct pyr_lib_policy_db *lib_perm_db,
   if (pyr_compute_lib_perms(req_acl, callgraph, name, &perms)) {
     PYR_ERROR("[%s] Error inspecting stack for resource %s for runtime %d\n", __func__, name, port_id);
   }
+  if (perms)
+    printk(KERN_INFO "[%s] Inspected stack for %s\n", __func__, req_acl->resource);
 
  out:
   if (callgraph)

@@ -673,11 +673,14 @@ int pyr_init_profile_lib_policy(struct pyr_profile *profile, u32 port_id) {
   mutex_lock(&profile->ns->lock);
   if (!profile->using_pyronia) {
     profile->main_pid = port_id;
-    profile->using_pyronia = 1;
     if (!profile->lib_perm_db) {
       err = pyr_new_lib_policy_db(&profile->lib_perm_db);
+      if (err)
+	goto out;
     }
+    profile->using_pyronia = 1;
   }
+ out:
   mutex_unlock(&profile->ns->lock);
   return err;
 }

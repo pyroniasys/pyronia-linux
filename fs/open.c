@@ -1061,7 +1061,8 @@ SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags,
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
 
-        copy_userspace_stack_hash((void __user **)&filename, FILENAME_RESOURCE);
+        if(copy_userspace_stack_hash((void __user **)&filename, FILENAME_RESOURCE)) {
+	}
         
 	return do_sys_open(dfd, filename, flags, mode);
 }
