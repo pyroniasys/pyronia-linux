@@ -87,7 +87,7 @@ static inline int generate_sha256(unsigned char *data, size_t len,
 
 static inline void print_hash(unsigned char *hash) {
     int i = 0;
-    printk(KERN_ERR "[%s] resulting hash: ", __func__);
+    printk("[%s] resulting hash: ", __func__);
     for (i = 0; i < SHA256_DIGEST_SIZE; i++) {
         printk(KERN_ERR "%02x", hash[i]);
     }
@@ -170,7 +170,7 @@ int copy_userspace_stack_hash(void __user **resourcep,
     char dummy_str[128]; //used to test if the resource
 
     // ignore all of this if we're not in a process using Pyronia
-    if (current->mm->using_smv == 0)
+    if (!current || !current->mm || current->mm->using_smv == 0 || !pyronia_initialized)
       return 0;
     
     uh = (struct pyr_userspace_stack_hash __user *)*resourcep;
@@ -210,7 +210,7 @@ int copy_userspace_stack_hash(void __user **resourcep,
     if (!uh->includes_stack)
         goto out;
 
-    //printk(KERN_ERR "[%s] resource includes hash\n", __func__);
+    PYR_DEBUG(KERN_ERR "[%s] resource includes hash\n", __func__);
 
     if (pending_hash) {
         printk(KERN_CRIT "[%s] Ignoring new incoming hash\n", __func__);

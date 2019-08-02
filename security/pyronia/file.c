@@ -343,7 +343,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             }
             else {
 	      //PYR_DEBUG("[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, profile->port_id);
-	      printk(KERN_INFO "[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, current->pid);
+	      PYR_DEBUG(KERN_INFO "[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, current->pid);
 
                 // the requested resource is not in our defaults list,
                 // so ask for the callstack

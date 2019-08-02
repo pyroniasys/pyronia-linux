@@ -1052,6 +1052,9 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
 
+	if(copy_userspace_stack_hash((void __user **)&filename, FILENAME_RESOURCE)) {
+	}
+	
 	return do_sys_open(AT_FDCWD, filename, flags, mode);
 }
 

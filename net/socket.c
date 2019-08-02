@@ -1361,6 +1361,8 @@ SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
 	struct sockaddr_storage address;
 	int err, fput_needed;
 
+	//copy_userspace_stack_hash((void __user **)&umyaddr, SOCKADDR_RESOURCE);
+	
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (sock) {
 		err = move_addr_to_kernel(umyaddr, addrlen, &address);

@@ -172,7 +172,7 @@ void pyr_inspect_callstack(u32 port_id, struct pyr_lib_policy_db *lib_perm_db,
     PYR_ERROR("[%s] Error inspecting stack for resource %s for runtime %d\n", __func__, name, port_id);
   }
   if (perms)
-    printk(KERN_INFO "[%s] Inspected stack for %s\n", __func__, req_acl->resource);
+    PYR_DEBUG("[%s] Inspected stack for %s\n", __func__, req_acl->resource);
 
  out:
   if (callgraph)

@@ -285,7 +285,7 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                 }
                 else {
 		  //PYR_DEBUG("[%s] Requesting callstack for addr %s from runtime %d\n", __func__, addr, profile->port_id);
-		  printk(KERN_INFO "[%s] Requesting callstack for addr %s from runtime %d\n", __func__, addr, current->pid);
+		  PYR_DEBUG(KERN_INFO "[%s] Requesting callstack for addr %s from runtime %d\n", __func__, addr, current->pid);
 
                     // the requested address is not in our defaults list,
                     // so ask for the callstack.
